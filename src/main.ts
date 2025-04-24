@@ -1,4 +1,3 @@
-
 import {
   Plugin,
   PluginSettingTab,
@@ -14,6 +13,7 @@ import {
 } from "obsidian";
 
 import { getDailyNote, createDailyNote, getAllDailyNotes } from "obsidian-daily-notes-interface";
+import GraphemeSplitter from "grapheme-splitter";
 
 interface StatusLolPluginSettings {
   apiKey: string;
@@ -43,66 +43,44 @@ export default class StatusLolPlugin extends Plugin {
       (this.app as any).plugins?.enabledPlugins?.has("periodic-notes");
 
     this.addRibbonIcon("megaphone", "Post to status.lol", () => {
-      new StatusPostModal(this.app, this.settings, async (status: string, sharePublicly: boolean) => {
-        let response;
-        try {
-          response = await this.postStatus(status, sharePublicly);
-        } catch (err) {
-          console.error("Post failed entirely:", err);
-        }
-
-        if (response?.url) {
-          new Notice("Status posted!");
-          if (this.settings.saveToNote && this.settings.logNotePath) {
-            await this.saveStatusToLogNote(status, response.url);
-          }
-          if (this.settings.alsoLogToDaily && this.dailyPluginAvailable) {
-            await this.saveStatusToDailyNote(status, response.url);
-          }
-        } else {
-          new Notice("Failed to post status. Saving locally.");
-          if (this.settings.alsoLogToDaily && this.dailyPluginAvailable) {
-            await this.saveStatusToDailyNote(status, "");
-          } else {
-            await this.saveStatusToFallbackNote(status);
-          }
-        }
-      }).open();
+      new StatusPostModal(this.app, this.settings, this.handleStatusPost.bind(this)).open();
     });
 
     this.addCommand({
       id: "post-status-to-statuslol",
       name: "Post to status.lol",
-      callback: async () => {
-        new StatusPostModal(this.app, this.settings, async (status: string, sharePublicly: boolean) => {
-          let response;
-          try {
-            response = await this.postStatus(status, sharePublicly);
-          } catch (err) {
-            console.error("Post failed entirely:", err);
-          }
-
-          if (response?.url) {
-            new Notice("Status posted!");
-            if (this.settings.saveToNote && this.settings.logNotePath) {
-              await this.saveStatusToLogNote(status, response.url);
-            }
-            if (this.settings.alsoLogToDaily && this.dailyPluginAvailable) {
-              await this.saveStatusToDailyNote(status, response.url);
-            }
-          } else {
-            new Notice("Failed to post status. Saving locally.");
-            if (this.settings.alsoLogToDaily && this.dailyPluginAvailable) {
-              await this.saveStatusToDailyNote(status, "");
-            } else {
-              await this.saveStatusToFallbackNote(status);
-            }
-          }
-        }).open();
+      callback: () => {
+        new StatusPostModal(this.app, this.settings, this.handleStatusPost.bind(this)).open();
       },
     });
 
     this.addSettingTab(new StatusLolSettingTab(this.app, this));
+  }
+
+  async handleStatusPost(status: string, sharePublicly: boolean) {
+    let response;
+    try {
+      response = await this.postStatus(status, sharePublicly);
+    } catch (err) {
+      console.error("Post failed entirely:", err);
+    }
+
+    if (response?.url) {
+      new Notice("Status posted!");
+      if (this.settings.saveToNote && this.settings.logNotePath) {
+        await this.saveStatusToLogNote(status, response.url);
+      }
+      if (this.settings.alsoLogToDaily && this.dailyPluginAvailable) {
+        await this.saveStatusToDailyNote(status, response.url);
+      }
+    } else {
+      new Notice("Failed to post status. Saving locally.");
+      if (this.settings.alsoLogToDaily && this.dailyPluginAvailable) {
+        await this.saveStatusToDailyNote(status, "");
+      } else {
+        await this.saveStatusToFallbackNote(status);
+      }
+    }
   }
 
   async postStatus(status: string, share: boolean): Promise<any> {
@@ -129,7 +107,7 @@ export default class StatusLolPlugin extends Plugin {
 
   async saveStatusToLogNote(status: string, url: string) {
     const fullPath = `${this.settings.logNotePath}.md`;
-    const timestamp = moment().format("YYYY-MM-DD HH:mm");
+    const timestamp = moment.default().format("YYYY-MM-DD HH:mm");
     const content = `\n- **${timestamp}**: [${status}](${url || "#"})`;
     const file = this.app.vault.getAbstractFileByPath(fullPath);
     if (file && file instanceof TFile) {
@@ -138,15 +116,15 @@ export default class StatusLolPlugin extends Plugin {
   }
 
   async saveStatusToDailyNote(status: string, url: string) {
-    const daily = getDailyNote(moment(), getAllDailyNotes());
-    const note = daily ?? await createDailyNote(moment());
-    const timestamp = moment().format("HH:mm");
+    const daily = getDailyNote(moment.default(), getAllDailyNotes());
+    const note = daily ?? await createDailyNote(moment.default());
+    const timestamp = moment.default().format("HH:mm");
     const content = `\n- **${timestamp}**: [${status}](${url || "#"})`;
     await this.app.vault.append(note, content);
   }
 
   async saveStatusToFallbackNote(status: string) {
-    const filename = `Failed Status - ${moment().format("YYYY-MM-DD HH-mm")}.md`;
+    const filename = `Failed Status - ${moment.default().format("YYYY-MM-DD HH-mm")}.md`;
     const file = await this.app.vault.create(filename, `Failed to post:\n\n${status}`);
     new Notice(`Saved fallback status to ${filename}`);
   }
@@ -304,16 +282,14 @@ class StatusPostModal extends Modal {
       return;
     }
 
-    const emojiRegex = /^\p{Extended_Pictographic}/u;
-    const needsEmojiSpace = emojiRegex.test(raw);
+    const splitter = new GraphemeSplitter();
+    const graphemes = splitter.splitGraphemes(raw);
+    const firstGrapheme = graphemes[0];
+    const secondChar = graphemes[1] ?? "";
 
-    if (needsEmojiSpace) {
-      const chars = Array.from(raw);
-      const emoji = chars[0];
-      const afterEmoji = chars[1] || "";
-      if (afterEmoji !== " " && !/[\s.,!?]/.test(afterEmoji)) {
-        raw = `${emoji} ${chars.slice(1).join("")}`;
-      }
+    const emojiRegex = /^\p{Extended_Pictographic}/u;
+    if (emojiRegex.test(firstGrapheme) && secondChar !== " " && !/[\s.,!?]/.test(secondChar)) {
+      raw = `${firstGrapheme} ${graphemes.slice(1).join("")}`;
     }
 
     const fixed = raw.normalize("NFC");
