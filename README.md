@@ -2,7 +2,7 @@
 
 Post status updates to [status.lol](https://status.lol) and optionally log them to your Obsidian notes.
 
-![screenshot](screenshot-post.png)
+![screenshot|300](screenshot-post.png)
 
 ## Features
 
