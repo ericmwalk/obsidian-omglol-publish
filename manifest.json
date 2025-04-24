@@ -1,5 +1,5 @@
 {
-  "id": "statuslol-plugin",
+  "id": "statuslol-post-plugin",
   "name": "Status.lol Publisher",
   "version": "1.0.0",
   "minAppVersion": "0.15.0",
