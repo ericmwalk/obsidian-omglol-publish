@@ -6,10 +6,11 @@ Post status updates to [status.lol](https://status.lol) and optionally log them 
 
 ## Features
 
-- Post status updates to your omg.lol address
+- Post status updates to your status.lol address
 - Choose whether to also share them on social.lol (this needs to be enabled on social.lol but can toggle off here per post)
 - Save to a custom log note or to your Daily Note
 - Works with both Daily Notes and Periodic Notes plugins
+- If posting to status.lol fails it will still save to a note so you don't lose your status
 
 ## Setup
 
