@@ -2,10 +2,12 @@
 
 Post status updates to [status.lol](https://status.lol) and optionally log them to your Obsidian notes.
 
+![screenshot](screenshot-post.png)
+
 ## Features
 
 - Post status updates to your omg.lol address
-- Choose whether to also share them on social.lol
+- Choose whether to also share them on social.lol (this needs to be enabled on social.lol but can toggle off here per post)
 - Save to a custom log note or to your Daily Note
 - Works with both Daily Notes and Periodic Notes plugins
 
@@ -15,9 +17,3 @@ Post status updates to [status.lol](https://status.lol) and optionally log them 
 2. Run `npm install` and `npm run build` to compile the plugin.
 3. Enable the plugin inside Obsidian.
 4. Configure the plugin settings (API key, address, and logging preferences).
-
-## Development
-
-```bash
-npm install
-npm run build
