@@ -8,12 +8,13 @@ import {
   ToggleComponent,
   Notice,
   TFile,
-  requestUrl,
-  moment
+  requestUrl
 } from "obsidian";
 
 import { getDailyNote, createDailyNote, getAllDailyNotes } from "obsidian-daily-notes-interface";
 import GraphemeSplitter from "grapheme-splitter";
+import moment from "moment";
+
 
 interface StatusLolPluginSettings {
   apiKey: string;
@@ -107,24 +108,26 @@ export default class StatusLolPlugin extends Plugin {
 
   async saveStatusToLogNote(status: string, url: string) {
     const fullPath = `${this.settings.logNotePath}.md`;
-    const timestamp = moment.default().format("YYYY-MM-DD HH:mm");
+    const timestamp = moment().format("YYYY-MM-DD HH:mm");
     const content = `\n- **${timestamp}**: [${status}](${url || "#"})`;
-    const file = this.app.vault.getAbstractFileByPath(fullPath);
+    let file = this.app.vault.getAbstractFileByPath(fullPath);
     if (file && file instanceof TFile) {
       await this.app.vault.append(file, content);
+    } else {
+      file = await this.app.vault.create(fullPath, content);
     }
   }
 
   async saveStatusToDailyNote(status: string, url: string) {
-    const daily = getDailyNote(moment.default(), getAllDailyNotes());
-    const note = daily ?? await createDailyNote(moment.default());
-    const timestamp = moment.default().format("HH:mm");
+    const daily = getDailyNote(moment(), getAllDailyNotes());
+    const note = daily ?? await createDailyNote(moment());
+    const timestamp = moment().format("HH:mm");
     const content = `\n- **${timestamp}**: [${status}](${url || "#"})`;
     await this.app.vault.append(note, content);
   }
 
   async saveStatusToFallbackNote(status: string) {
-    const filename = `Failed Status - ${moment.default().format("YYYY-MM-DD HH-mm")}.md`;
+    const filename = `Failed Status - ${moment().format("YYYY-MM-DD HH-mm")}.md`;
     const file = await this.app.vault.create(filename, `Failed to post:\n\n${status}`);
     new Notice(`Saved fallback status to ${filename}`);
   }
