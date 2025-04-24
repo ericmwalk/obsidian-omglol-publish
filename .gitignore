@@ -1,5 +1,21 @@
+# obsidian settings
 data.json
+
+# npm
+node_modules
+
+# Don't include the compiled main.js file in the repo.
+main.js
+
+# Exclude sourcemaps
+*.map
+
+# Exclude macOS Finder (System Explorer) View States
+.DS_Store
+
+# other stuff
+*.iml
+.idea
+.vscode 
 node_modules/
 dist/
-.DS_Store
-*.log

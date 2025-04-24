@@ -1,39 +1,48 @@
+
+// main.ts
 import {
+  App,
+  ButtonComponent,
+  Modal,
+  Notice,
   Plugin,
   PluginSettingTab,
-  App,
-  Modal,
   Setting,
-  TextComponent,
-  ToggleComponent,
-  Notice,
   TFile,
+  addIcon,
   requestUrl
 } from "obsidian";
 
-import { getDailyNote, createDailyNote, getAllDailyNotes } from "obsidian-daily-notes-interface";
-import GraphemeSplitter from "grapheme-splitter";
+import {
+  getDailyNote,
+  createDailyNote,
+  getAllDailyNotes
+} from "obsidian-daily-notes-interface";
+
 import moment from "moment";
 
-
-interface StatusLolPluginSettings {
-  apiKey: string;
-  address: string;
-  saveToNote: boolean;
-  logNotePath: string | null;
-  alsoLogToDaily: boolean;
+interface StatusPosterSettings {
+  username: string;
+  token: string;
+  skip_mastodon_post: boolean;
+  default_emoji: string;
+  saveToNote?: boolean;
+  logNotePath?: string | null;
+  alsoLogToDaily?: boolean;
 }
 
-const DEFAULT_SETTINGS: StatusLolPluginSettings = {
-  apiKey: "",
-  address: "",
+const DEFAULT_SETTINGS: StatusPosterSettings = {
+  username: '',
+  token: '',
+  skip_mastodon_post: false,
+  default_emoji: '📣',
   saveToNote: false,
   logNotePath: null,
   alsoLogToDaily: false,
 };
 
-export default class StatusLolPlugin extends Plugin {
-  settings: StatusLolPluginSettings;
+export default class StatusPosterPlugin extends Plugin {
+  settings: StatusPosterSettings;
   dailyPluginAvailable: boolean = false;
 
   async onload() {
@@ -47,89 +56,64 @@ export default class StatusLolPlugin extends Plugin {
       new StatusPostModal(this.app, this.settings, this.handleStatusPost.bind(this)).open();
     });
 
-    this.addCommand({
-      id: "post-status-to-statuslol",
-      name: "Post to status.lol",
-      callback: () => {
-        new StatusPostModal(this.app, this.settings, this.handleStatusPost.bind(this)).open();
-      },
-    });
-
-    this.addSettingTab(new StatusLolSettingTab(this.app, this));
+    this.addSettingTab(new StatusPosterSettingTab(this.app, this));
   }
 
-  async handleStatusPost(status: string, sharePublicly: boolean) {
-    let response;
-    try {
-      response = await this.postStatus(status, sharePublicly);
-    } catch (err) {
-      console.error("Post failed entirely:", err);
-    }
+  async handleStatusPost(status: string, skipMastodon: boolean) {
+    const emojiData = this.getDataToPost(status, skipMastodon);
 
-    if (response?.url) {
-      new Notice("Status posted!");
-      if (this.settings.saveToNote && this.settings.logNotePath) {
-        await this.saveStatusToLogNote(status, response.url);
-      }
-      if (this.settings.alsoLogToDaily && this.dailyPluginAvailable) {
-        await this.saveStatusToDailyNote(status, response.url);
-      }
-    } else {
-      new Notice("Failed to post status. Saving locally.");
-      if (this.settings.alsoLogToDaily && this.dailyPluginAvailable) {
-        await this.saveStatusToDailyNote(status, "");
-      } else {
-        await this.saveStatusToFallbackNote(status);
-      }
-    }
-  }
-
-  async postStatus(status: string, share: boolean): Promise<any> {
-    const endpoint = `https://api.omg.lol/address/${this.settings.address}/statuses/`;
     try {
       const res = await requestUrl({
-        url: endpoint,
-        method: "POST",
+        url: `https://api.omg.lol/address/${this.settings.username}/statuses/`,
+        method: 'POST',
+        body: emojiData,
         headers: {
-          Authorization: `Bearer ${this.settings.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          status,
-          skip_mastodon_post: !share
-        }),
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + this.settings.token
+        }
       });
-      return res.json.response;
-    } catch (err) {
-      console.error("Status.lol Post Error:", err);
-      return null;
+      const response = res.json.response;
+      new Notice('🎉 Published!');
+
+      if (this.settings.saveToNote && this.settings.logNotePath) {
+        await this.appendToNote(this.settings.logNotePath, status, response.url);
+      }
+      if (this.settings.alsoLogToDaily && this.dailyPluginAvailable) {
+        const daily = getDailyNote(moment(), getAllDailyNotes()) ?? await createDailyNote(moment());
+        await this.appendToNote(daily.path.replace(/\.md$/, ''), status, response.url);
+      }
+    } catch (error) {
+      console.error('Post failed:', error);
+      new Notice('Failed to post status. Saving locally.');
+      const fallbackPath = `Failed Status - ${moment().format("YYYY-MM-DD HH-mm")}`;
+      await this.app.vault.create(fallbackPath + '.md', `Failed to post:\n\n${status}`);
     }
   }
 
-  async saveStatusToLogNote(status: string, url: string) {
-    const fullPath = `${this.settings.logNotePath}.md`;
+  async appendToNote(notePath: string, status: string, url: string) {
+    const fullPath = `${notePath}.md`;
     const timestamp = moment().format("YYYY-MM-DD HH:mm");
-    const content = `\n- **${timestamp}**: [${status}](${url || "#"})`;
-    let file = this.app.vault.getAbstractFileByPath(fullPath);
-    if (file && file instanceof TFile) {
+    const content = `\n- **${timestamp}**: [${status}](${url || '#'})`;
+    const file = this.app.vault.getAbstractFileByPath(fullPath);
+    if (file instanceof TFile) {
       await this.app.vault.append(file, content);
     } else {
-      file = await this.app.vault.create(fullPath, content);
+      await this.app.vault.create(fullPath, content);
     }
   }
 
-  async saveStatusToDailyNote(status: string, url: string) {
-    const daily = getDailyNote(moment(), getAllDailyNotes());
-    const note = daily ?? await createDailyNote(moment());
-    const timestamp = moment().format("HH:mm");
-    const content = `\n- **${timestamp}**: [${status}](${url || "#"})`;
-    await this.app.vault.append(note, content);
-  }
+  getDataToPost(text: string, skipMastodon: boolean) {
+    const trimmed = text.trim();
+    const emojiRegex = /^\p{Extended_Pictographic}/u;
+    const emojiMatch = trimmed.match(emojiRegex);
+    const emoji = emojiMatch ? emojiMatch[0] : this.settings.default_emoji;
+    const content = emojiMatch ? trimmed.replace(emojiRegex, '').trim() : trimmed;
 
-  async saveStatusToFallbackNote(status: string) {
-    const filename = `Failed Status - ${moment().format("YYYY-MM-DD HH-mm")}.md`;
-    const file = await this.app.vault.create(filename, `Failed to post:\n\n${status}`);
-    new Notice(`Saved fallback status to ${filename}`);
+    return JSON.stringify({
+      content,
+      emoji,
+      skip_mastodon_post: skipMastodon
+    });
   }
 
   async loadSettings() {
@@ -141,98 +125,12 @@ export default class StatusLolPlugin extends Plugin {
   }
 }
 
-class StatusLolSettingTab extends PluginSettingTab {
-  plugin: StatusLolPlugin;
-
-  constructor(app: App, plugin: StatusLolPlugin) {
-    super(app, plugin);
-    this.plugin = plugin;
-  }
-
-  display(): void {
-    const { containerEl } = this;
-    containerEl.empty();
-    containerEl.createEl("h2", { text: "Status.lol Plugin Settings" });
-
-    new Setting(containerEl)
-      .setName("API Key")
-      .addText((text: TextComponent) =>
-        text
-          .setPlaceholder("Enter your omg.lol API key")
-          .setValue(this.plugin.settings.apiKey)
-          .onChange(async (value: string) => {
-            this.plugin.settings.apiKey = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("omg.lol Address")
-      .addText((text: TextComponent) =>
-        text
-          .setPlaceholder("e.g. ericmwalk")
-          .setValue(this.plugin.settings.address)
-          .onChange(async (value: string) => {
-            this.plugin.settings.address = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Save to Daily Note")
-      .setDesc(this.plugin.dailyPluginAvailable
-        ? "Appends to today's Daily Note if enabled"
-        : "Enable Daily Notes or Periodic Notes plugin to use this")
-      .addToggle((toggle: ToggleComponent) => {
-        const enabled = this.plugin.dailyPluginAvailable;
-        toggle.setDisabled(!enabled);
-
-        if (!enabled) {
-          toggle.setValue(false);
-          this.plugin.settings.alsoLogToDaily = false;
-          this.plugin.saveSettings();
-        } else {
-          toggle
-            .setValue(this.plugin.settings.alsoLogToDaily)
-            .onChange(async (value: boolean) => {
-              this.plugin.settings.alsoLogToDaily = value;
-              await this.plugin.saveSettings();
-            });
-        }
-      });
-
-    new Setting(containerEl)
-      .setName("Save to a custom note")
-      .addToggle((toggle: ToggleComponent) =>
-        toggle
-          .setValue(this.plugin.settings.saveToNote)
-          .onChange(async (value: boolean) => {
-            this.plugin.settings.saveToNote = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Note name to save posts")
-      .setDesc("Enter note path (e.g. 'Status.lol Posts' or 'logs/status') — omit the .md")
-      .addText((text: TextComponent) =>
-        text
-          .setPlaceholder("e.g. logs/status")
-          .setValue(this.plugin.settings.logNotePath ?? "")
-          .onChange(async (value: string) => {
-            this.plugin.settings.logNotePath = value.trim() || null;
-            await this.plugin.saveSettings();
-          })
-      );
-  }
-}
-
 class StatusPostModal extends Modal {
   statusText: string = "";
   sharePublicly: boolean = true;
   onSubmit: (status: string, share: boolean) => void;
 
-  constructor(app: App, settings: StatusLolPluginSettings, onSubmit: (status: string, share: boolean) => void) {
+  constructor(app: App, settings: StatusPosterSettings, onSubmit: (status: string, share: boolean) => void) {
     super(app);
     this.onSubmit = onSubmit;
   }
@@ -243,31 +141,18 @@ class StatusPostModal extends Modal {
 
     const textarea = contentEl.createEl("textarea", { cls: "status-input" });
     textarea.style.width = "100%";
-    textarea.style.boxSizing = "border-box";
     textarea.rows = 4;
-    textarea.maxLength = 300;
-
-    const counter = contentEl.createEl("div", { text: "0/300", cls: "char-count" });
 
     textarea.addEventListener("input", () => {
       this.statusText = textarea.value;
-      counter.setText(`${this.statusText.length}/300`);
     });
 
-    this.containerEl.addEventListener("keydown", (e: KeyboardEvent) => {
+    textarea.addEventListener("keydown", (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         e.preventDefault();
-        this.submitStatus();
+        this.submit();
       }
     });
-
-    new Setting(contentEl)
-      .addButton((btn) =>
-        btn
-          .setButtonText("Post")
-          .setCta()
-          .onClick(() => this.submitStatus())
-      );
 
     new Setting(contentEl)
       .setName("Post to social.lol")
@@ -276,31 +161,102 @@ class StatusPostModal extends Modal {
           this.sharePublicly = val;
         })
       );
+
+    new ButtonComponent(contentEl)
+      .setButtonText("Post")
+      .setCta()
+      .onClick(() => this.submit());
   }
 
-  submitStatus() {
-    let raw = this.statusText.trim();
-    if (raw.length === 0) {
-      new Notice("Please enter a status message.");
+  submit() {
+    const text = this.statusText.trim();
+    if (!text) {
+      new Notice("Please enter a status.");
       return;
     }
-
-    const splitter = new GraphemeSplitter();
-    const graphemes = splitter.splitGraphemes(raw);
-    const firstGrapheme = graphemes[0];
-    const secondChar = graphemes[1] ?? "";
-
-    const emojiRegex = /^\p{Extended_Pictographic}/u;
-    if (emojiRegex.test(firstGrapheme) && secondChar !== " " && !/[\s.,!?]/.test(secondChar)) {
-      raw = `${firstGrapheme} ${graphemes.slice(1).join("")}`;
-    }
-
-    const fixed = raw.normalize("NFC");
-    this.onSubmit(fixed, this.sharePublicly);
+    this.onSubmit(text, !this.sharePublicly);
     this.close();
   }
 
   onClose() {
     this.contentEl.empty();
+  }
+}
+
+class StatusPosterSettingTab extends PluginSettingTab {
+  plugin: StatusPosterPlugin;
+
+  constructor(app: App, plugin: StatusPosterPlugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
+
+  display(): void {
+    const { containerEl } = this;
+    containerEl.empty();
+
+    new Setting(containerEl)
+      .setName('Username')
+      .setDesc('Your omg.lol username')
+      .addText(text =>
+        text.setValue(this.plugin.settings.username)
+          .onChange(async (value) => {
+            this.plugin.settings.username = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('API Token')
+      .setDesc('Your omg.lol API token')
+      .addText(text =>
+        text.setValue(this.plugin.settings.token)
+          .onChange(async (value) => {
+            this.plugin.settings.token = value;
+            await this.plugin.saveSettings();
+          }).inputEl.type = 'password'
+      );
+
+    new Setting(containerEl)
+      .setName('Default Emoji')
+      .setDesc('Used if no emoji is provided at the start of your status')
+      .addText(text =>
+        text.setValue(this.plugin.settings.default_emoji)
+          .onChange(async (value) => {
+            this.plugin.settings.default_emoji = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Save to Daily Note")
+      .addToggle(toggle =>
+        toggle.setValue(this.plugin.settings.alsoLogToDaily ?? false)
+          .onChange(async (value) => {
+            this.plugin.settings.alsoLogToDaily = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Save to Custom Note")
+      .addToggle(toggle =>
+        toggle.setValue(this.plugin.settings.saveToNote ?? false)
+          .onChange(async (value) => {
+            this.plugin.settings.saveToNote = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Log Note Path")
+      .setDesc("Example: logs/status-log")
+      .addText(text =>
+        text.setValue(this.plugin.settings.logNotePath || '')
+          .onChange(async (value) => {
+            this.plugin.settings.logNotePath = value.trim();
+            await this.plugin.saveSettings();
+          })
+      );
   }
 }
