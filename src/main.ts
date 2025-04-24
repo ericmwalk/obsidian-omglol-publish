@@ -1,5 +1,5 @@
+// ======= Initialization and Processing ======= 
 
-// main.ts
 import {
   App,
   ButtonComponent,
@@ -20,6 +20,7 @@ import {
 } from "obsidian-daily-notes-interface";
 
 import moment from "moment";
+import GraphemeSplitter from "grapheme-splitter";
 
 interface StatusPosterSettings {
   username: string;
@@ -104,16 +105,36 @@ export default class StatusPosterPlugin extends Plugin {
 
   getDataToPost(text: string, skipMastodon: boolean) {
     const trimmed = text.trim();
-    const emojiRegex = /^\p{Extended_Pictographic}/u;
-    const emojiMatch = trimmed.match(emojiRegex);
-    const emoji = emojiMatch ? emojiMatch[0] : this.settings.default_emoji;
-    const content = emojiMatch ? trimmed.replace(emojiRegex, '').trim() : trimmed;
+    const splitter = new GraphemeSplitter();
+    const graphemes = splitter.splitGraphemes(trimmed);
 
-    return JSON.stringify({
+    // console.log("🧪 Full graphemes:", graphemes); // test line
+
+    let emojiGraphemes = [];
+    for (const g of graphemes) {
+      if (/\p{Extended_Pictographic}/u.test(g) || g === '\u200d') {
+        emojiGraphemes.push(g);
+      } else {
+        break;
+      }
+    }
+
+    const hasEmoji = emojiGraphemes.length > 0;
+    const emoji = hasEmoji ? emojiGraphemes.join('') : this.settings.default_emoji;
+    const content = hasEmoji ? trimmed.slice(emoji.length).trim() : trimmed;
+
+    // console.log("🧪 Detected emoji string:", emoji); // test line
+    // console.log("🧪 Remaining content:", content); // test line
+
+    const payload = {
       content,
       emoji,
       skip_mastodon_post: skipMastodon
-    });
+    };
+
+    // console.log("📦 JSON payload:", JSON.stringify(payload)); // test line
+
+    return JSON.stringify(payload);
   }
 
   async loadSettings() {
@@ -124,6 +145,8 @@ export default class StatusPosterPlugin extends Plugin {
     await this.saveData(this.settings);
   }
 }
+
+// ======= POSTING AND OUTPUT =======
 
 class StatusPostModal extends Modal {
   statusText: string = "";
