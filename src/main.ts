@@ -54,7 +54,7 @@ export default class StatusPosterPlugin extends Plugin {
       (this.app as any).plugins?.enabledPlugins?.has("periodic-notes");
 
     this.addRibbonIcon("megaphone", "Post to status.lol", () => {
-      new StatusPostModal(this.app, this.settings, this.handleStatusPost.bind(this)).open();
+      new StatusPostModal(this.app, this, this.settings, this.handleStatusPost.bind(this)).open();
     });
 
     this.addSettingTab(new StatusPosterSettingTab(this.app, this));
@@ -108,8 +108,6 @@ export default class StatusPosterPlugin extends Plugin {
     const splitter = new GraphemeSplitter();
     const graphemes = splitter.splitGraphemes(trimmed);
 
-    // console.log("🧪 Full graphemes:", graphemes); // test line
-
     let emojiGraphemes = [];
     for (const g of graphemes) {
       if (/\p{Extended_Pictographic}/u.test(g) || g === '\u200d') {
@@ -123,16 +121,11 @@ export default class StatusPosterPlugin extends Plugin {
     const emoji = hasEmoji ? emojiGraphemes.join('') : this.settings.default_emoji;
     const content = hasEmoji ? trimmed.slice(emoji.length).trim() : trimmed;
 
-    // console.log("🧪 Detected emoji string:", emoji); // test line
-    // console.log("🧪 Remaining content:", content); // test line
-
     const payload = {
       content,
       emoji,
       skip_mastodon_post: skipMastodon
     };
-
-    // console.log("📦 JSON payload:", JSON.stringify(payload)); // test line
 
     return JSON.stringify(payload);
   }
@@ -153,17 +146,26 @@ class StatusPostModal extends Modal {
   sharePublicly: boolean = true;
   onSubmit: (status: string, share: boolean) => void;
 
-  constructor(app: App, settings: StatusPosterSettings, onSubmit: (status: string, share: boolean) => void) {
+  constructor(app: App, public plugin: StatusPosterPlugin, settings: StatusPosterSettings, onSubmit: (status: string, share: boolean) => void) {
     super(app);
     this.onSubmit = onSubmit;
   }
 
   onOpen() {
     const { contentEl } = this;
+
+    // Inject per-modal CSS
+    if (!document.querySelector("link[href$='styles.css']")) {
+      const css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.type = "text/css";
+      css.href = this.app.vault.adapter.getResourcePath(this.plugin.manifest.dir + "/styles.css");
+      document.head.appendChild(css);
+    }
+
     contentEl.createEl("h2", { text: "Post to status.lol" });
 
     const textarea = contentEl.createEl("textarea", { cls: "status-input" });
-    textarea.style.width = "100%";
     textarea.rows = 4;
 
     textarea.addEventListener("input", () => {
