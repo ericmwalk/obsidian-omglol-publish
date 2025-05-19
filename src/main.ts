@@ -78,7 +78,10 @@ export default class StatusPosterPlugin extends Plugin {
 
       if (this.settings.saveToNote && this.settings.logNotePath) {
         await this.appendToNote(this.settings.logNotePath, status, response.url);
+      } else if (this.settings.saveToNote && !this.settings.logNotePath) {
+        new Notice("Log note path is not set.");
       }
+
       if (this.settings.alsoLogToDaily && this.dailyPluginAvailable) {
         const daily = getDailyNote(moment(), getAllDailyNotes()) ?? await createDailyNote(moment());
         await this.appendToNote(daily.path.replace(/\.md$/, ''), status, response.url);
@@ -86,7 +89,7 @@ export default class StatusPosterPlugin extends Plugin {
     } catch (error) {
       console.error('Post failed:', error);
       new Notice('Failed to post status. Saving locally.');
-      const fallbackPath = `Failed Status - ${moment().format("YYYY-MM-DD HH-mm")}`;
+      const fallbackPath = `Failed Status - ${moment().format("YYYY-MM-DD HH-mm")}-${Math.floor(Math.random() * 1000)}`;
       await this.app.vault.create(fallbackPath + '.md', `Failed to post:\n\n${status}`);
     }
   }
@@ -94,7 +97,8 @@ export default class StatusPosterPlugin extends Plugin {
   async appendToNote(notePath: string, status: string, url: string) {
     const fullPath = `${notePath}.md`;
     const timestamp = moment().format("YYYY-MM-DD HH:mm");
-    const content = `\n- **${timestamp}**: [${status}](${url || '#'})`;
+    const safeStatus = status.replace(/[\[\]]/g, "\\$&");
+    const content = `\n- **${timestamp}**: [${safeStatus}](${url || '#'})`;
     const file = this.app.vault.getAbstractFileByPath(fullPath);
     if (file instanceof TFile) {
       await this.app.vault.append(file, content);
@@ -154,15 +158,6 @@ class StatusPostModal extends Modal {
   onOpen() {
     const { contentEl } = this;
 
-    // Inject per-modal CSS
-    if (!document.querySelector("link[href$='styles.css']")) {
-      const css = document.createElement("link");
-      css.rel = "stylesheet";
-      css.type = "text/css";
-      css.href = this.app.vault.adapter.getResourcePath(this.plugin.manifest.dir + "/styles.css");
-      document.head.appendChild(css);
-    }
-
     contentEl.createEl("h2", { text: "Post to status.lol" });
 
     const textarea = contentEl.createEl("textarea", { cls: "status-input" });
@@ -178,6 +173,8 @@ class StatusPostModal extends Modal {
         this.submit();
       }
     });
+
+    setTimeout(() => textarea.focus(), 100);
 
     new Setting(contentEl)
       .setName("Post to social.lol")
@@ -232,18 +229,19 @@ class StatusPosterSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName('API Token')
+      .setName('API token')
       .setDesc('Your omg.lol API token')
-      .addText(text =>
+      .addText(text => {
+        text.inputEl.type = 'password';
         text.setValue(this.plugin.settings.token)
           .onChange(async (value) => {
             this.plugin.settings.token = value;
             await this.plugin.saveSettings();
-          }).inputEl.type = 'password'
-      );
+          });
+      });
 
     new Setting(containerEl)
-      .setName('Default Emoji')
+      .setName('Default emoji')
       .setDesc('Used if no emoji is provided at the start of your status')
       .addText(text =>
         text.setValue(this.plugin.settings.default_emoji)
@@ -254,34 +252,38 @@ class StatusPosterSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Save to Daily Note")
+      .setName("Save to daily note")
       .addToggle(toggle =>
         toggle.setValue(this.plugin.settings.alsoLogToDaily ?? false)
           .onChange(async (value) => {
             this.plugin.settings.alsoLogToDaily = value;
             await this.plugin.saveSettings();
+            this.display();
           })
       );
 
     new Setting(containerEl)
-      .setName("Save to Custom Note")
+      .setName("Save to custom note")
       .addToggle(toggle =>
         toggle.setValue(this.plugin.settings.saveToNote ?? false)
           .onChange(async (value) => {
             this.plugin.settings.saveToNote = value;
             await this.plugin.saveSettings();
+            this.display();
           })
       );
 
-    new Setting(containerEl)
-      .setName("Log Note Path")
-      .setDesc("Example: logs/status-log")
-      .addText(text =>
-        text.setValue(this.plugin.settings.logNotePath || '')
-          .onChange(async (value) => {
-            this.plugin.settings.logNotePath = value.trim();
-            await this.plugin.saveSettings();
-          })
-      );
+    if (this.plugin.settings.saveToNote) {
+      new Setting(containerEl)
+        .setName("Log note path")
+        .setDesc("Example: logs/status-log")
+        .addText(text =>
+          text.setValue(this.plugin.settings.logNotePath || '')
+            .onChange(async (value) => {
+              this.plugin.settings.logNotePath = value.trim();
+              await this.plugin.saveSettings();
+            })
+        );
+    }
   }
 }
