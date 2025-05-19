@@ -1,4 +1,4 @@
-# Obsidian Status.lol Plugin
+# Status.lol Plugin for Obsidian
 
 Post status updates to [status.lol](https://status.lol) and optionally log them to your Obsidian notes.
 
