@@ -10,7 +10,8 @@ import {
   Setting,
   TFile,
   addIcon,
-  requestUrl
+  requestUrl,
+  moment
 } from "obsidian";
 
 import {
@@ -19,8 +20,9 @@ import {
   getAllDailyNotes
 } from "obsidian-daily-notes-interface";
 
-import moment from "moment";
 import GraphemeSplitter from "grapheme-splitter";
+
+const momentInstance = (moment as any);
 
 interface StatusPosterSettings {
   username: string;
@@ -83,20 +85,20 @@ export default class StatusPosterPlugin extends Plugin {
       }
 
       if (this.settings.alsoLogToDaily && this.dailyPluginAvailable) {
-        const daily = getDailyNote(moment(), getAllDailyNotes()) ?? await createDailyNote(moment());
+        const daily = getDailyNote(momentInstance(), getAllDailyNotes()) ?? await createDailyNote(momentInstance());
         await this.appendToNote(daily.path.replace(/\.md$/, ''), status, response.url);
       }
     } catch (error) {
       console.error('Post failed:', error);
       new Notice('Failed to post status. Saving locally.');
-      const fallbackPath = `Failed Status - ${moment().format("YYYY-MM-DD HH-mm")}-${Math.floor(Math.random() * 1000)}`;
+      const fallbackPath = `Failed Status - ${momentInstance().format("YYYY-MM-DD HH-mm")}-${Math.floor(Math.random() * 1000)}`;
       await this.app.vault.create(fallbackPath + '.md', `Failed to post:\n\n${status}`);
     }
   }
 
   async appendToNote(notePath: string, status: string, url: string) {
     const fullPath = `${notePath}.md`;
-    const timestamp = moment().format("YYYY-MM-DD HH:mm");
+    const timestamp = momentInstance().format("YYYY-MM-DD HH:mm");
     const safeStatus = status.replace(/[\[\]]/g, "\\$&");
     const content = `\n- **${timestamp}**: [${safeStatus}](${url || '#'})`;
     const file = this.app.vault.getAbstractFileByPath(fullPath);

@@ -1,7 +1,7 @@
 {
 	"id": "statuslol-post",
 	"name": "Status.lol Publisher",
-	"version": "1.0.3",
+	"version": "1.0.4",
 	"minAppVersion": "0.15.0",
 	"description": "Post statuses to status.lol, log notes option, and mobile compatibility.",
 	"author": "Eric Walker",

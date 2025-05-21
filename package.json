@@ -1,6 +1,6 @@
 {
 	"name": "statuslog-post",
-	"version": "1.0.3",
+	"version": "1.0.4",
 	"description": "Plugin to post selected text to OMG.lol statuslog for Obsidian (https://obsidian.md)",
 	"main": "main.js",
 	"scripts": {
