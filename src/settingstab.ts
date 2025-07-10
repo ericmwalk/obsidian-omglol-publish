@@ -1,24 +1,24 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
-import { StatusPosterPlugin } from "./main";
-import { StatusPosterSettings } from "./types";
+import WeblogPublisher from "./main";
 
 export class SettingsTab extends PluginSettingTab {
-  plugin: StatusPosterPlugin;
-
-  constructor(app: App, plugin: StatusPosterPlugin) {
+  constructor(app: App, private plugin: WeblogPublisher) {
     super(app, plugin);
-    this.plugin = plugin;
   }
 
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
 
+    containerEl.createEl("h2", { text: "omg.lol Plugin Settings" });
+
+    // === Shared OMG Settings ===
     new Setting(containerEl)
-      .setName('Username')
-      .setDesc('Your omg.lol username')
+      .setName("OMG.lol Username")
+      .setDesc("Your omg.lol username")
       .addText(text =>
-        text.setValue(this.plugin.settings.username)
+        text.setPlaceholder("username")
+          .setValue(this.plugin.settings.username)
           .onChange(async (value) => {
             this.plugin.settings.username = value;
             await this.plugin.saveSettings();
@@ -26,66 +26,32 @@ export class SettingsTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName('API token')
-      .setDesc('Your omg.lol API token')
-      .addText(text => {
-        text.inputEl.type = 'password';
-        text.setValue(this.plugin.settings.token)
+      .setName("Token")
+      .setDesc("Your omg.lol API token")
+      .addText(text =>
+        text.setPlaceholder("token")
+          .setValue(this.plugin.settings.token)
           .onChange(async (value) => {
             this.plugin.settings.token = value;
             await this.plugin.saveSettings();
-          });
-      });
-
-    new Setting(containerEl)
-      .setName('Default emoji')
-      .setDesc('Used if no emoji is provided at the start of your status')
-      .addText(text =>
-        text.setValue(this.plugin.settings.default_emoji)
-          .onChange(async (value) => {
-            this.plugin.settings.default_emoji = value;
-            await this.plugin.saveSettings();
           })
       );
 
+    // === Status.lol Feature Toggle ===
     new Setting(containerEl)
-      .setName("Save to daily note")
+      .setName("Enable status.lol features")
       .addToggle(toggle =>
-        toggle.setValue(this.plugin.settings.alsoLogToDaily ?? false)
+        toggle.setValue(this.plugin.settings.enableStatusPoster ?? true)
           .onChange(async (value) => {
-            this.plugin.settings.alsoLogToDaily = value;
+            this.plugin.settings.enableStatusPoster = value;
             await this.plugin.saveSettings();
             this.display();
           })
       );
 
+    // === Weblog Feature Toggle ===
     new Setting(containerEl)
-      .setName("Save to custom note")
-      .addToggle(toggle =>
-        toggle.setValue(this.plugin.settings.saveToNote ?? false)
-          .onChange(async (value) => {
-            this.plugin.settings.saveToNote = value;
-            await this.plugin.saveSettings();
-            this.display();
-          })
-      );
-
-    if (this.plugin.settings.saveToNote) {
-      new Setting(containerEl)
-        .setName("Log note path")
-        .setDesc("Example: logs/status-log")
-        .addText(text =>
-          text.setValue(this.plugin.settings.logNotePath || '')
-            .onChange(async (value) => {
-              this.plugin.settings.logNotePath = value.trim();
-              await this.plugin.saveSettings();
-            })
-        );
-    }
-
-    new Setting(containerEl)
-      .setName("Enable weblog publishing")
-      .setDesc("Allow publishing notes to your omg.lol weblog")
+      .setName("Enable weblog.lol features")
       .addToggle(toggle =>
         toggle.setValue(this.plugin.settings.enableWeblog ?? true)
           .onChange(async (value) => {
@@ -94,5 +60,101 @@ export class SettingsTab extends PluginSettingTab {
             this.display();
           })
       );
+
+    // === Weblog Settings ===
+    if (this.plugin.settings.enableWeblog) {
+      containerEl.createEl("h3", { text: "Weblog Settings" });
+
+      new Setting(containerEl)
+        .setName("Enable automatic renaming")
+        .setDesc("Rename note to use slug after publishing")
+        .addToggle(toggle =>
+          toggle.setValue(this.plugin.settings.enableRenaming)
+            .onChange(async (value) => {
+              this.plugin.settings.enableRenaming = value;
+              await this.plugin.saveSettings();
+            })
+        );
+
+      new Setting(containerEl)
+        .setName("Slug word count")
+        .setDesc("Number of words to use in auto-generated slug")
+        .addText(text =>
+          text.setPlaceholder("5")
+            .setValue(this.plugin.settings.slugWordCount.toString())
+            .onChange(async (value) => {
+              const num = parseInt(value);
+              if (!isNaN(num) && num > 0) {
+                this.plugin.settings.slugWordCount = num;
+                await this.plugin.saveSettings();
+              }
+            })
+        );
+    }
+
+    // === Status Settings ===
+    if (this.plugin.settings.enableStatusPoster) {
+      containerEl.createEl("h3", { text: "Status Settings" });
+
+      new Setting(containerEl)
+        .setName("Default emoji")
+        .setDesc("Emoji to prepend if none is given")
+        .addText(text =>
+          text.setPlaceholder("💬")
+            .setValue(this.plugin.settings.default_emoji)
+            .onChange(async (value) => {
+              this.plugin.settings.default_emoji = value;
+              await this.plugin.saveSettings();
+            })
+        );
+
+      new Setting(containerEl)
+        .setName("Skip Mastodon post")
+        .setDesc("Prevent cross-posting to Mastodon")
+        .addToggle(toggle =>
+          toggle.setValue(this.plugin.settings.skip_mastodon_post)
+            .onChange(async (value) => {
+              this.plugin.settings.skip_mastodon_post = value;
+              await this.plugin.saveSettings();
+            })
+        );
+
+      new Setting(containerEl)
+        .setName("Save to note")
+        .setDesc("Save status to a log note")
+        .addToggle(toggle =>
+          toggle.setValue(this.plugin.settings.saveToNote ?? true)
+            .onChange(async (value) => {
+              this.plugin.settings.saveToNote = value;
+              await this.plugin.saveSettings();
+              this.display();
+            })
+        );
+
+      if (this.plugin.settings.saveToNote) {
+        new Setting(containerEl)
+          .setName("Log note path")
+          .setDesc("Path to the log note where statuses will be saved")
+          .addText(text =>
+            text.setPlaceholder("path/to/statuslog.md")
+              .setValue(this.plugin.settings.logNotePath || "")
+              .onChange(async (value) => {
+                this.plugin.settings.logNotePath = value;
+                await this.plugin.saveSettings();
+              })
+          );
+      }
+
+      new Setting(containerEl)
+        .setName("Also log to Daily Note")
+        .setDesc("Append status to today's Daily Note as well")
+        .addToggle(toggle =>
+          toggle.setValue(this.plugin.settings.alsoLogToDaily ?? false)
+            .onChange(async (value) => {
+              this.plugin.settings.alsoLogToDaily = value;
+              await this.plugin.saveSettings();
+            })
+        );
+    }
   }
 }

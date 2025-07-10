@@ -7,20 +7,28 @@ export class StatusPostModal extends Modal {
   sharePublicly: boolean = true;
   onSubmit: (status: string, share: boolean) => void;
 
+  private settings: StatusPosterSettings;
+  private skipMasto: boolean;
+
   constructor(
     app: App,
     public plugin: StatusPosterPlugin,
     settings: StatusPosterSettings,
-    onSubmit: (status: string, share: boolean) => void
+    onSubmit: (status: string, share: boolean) => void,
+    defaultSkipMasto: boolean
   ) {
     super(app);
+    this.plugin = plugin;
+    this.settings = settings;
     this.onSubmit = onSubmit;
+    this.skipMasto = defaultSkipMasto;
+    this.sharePublicly = !defaultSkipMasto;
   }
 
   onOpen() {
     const { contentEl } = this;
 
-    contentEl.createEl("h2", { text: "Post to status.lol" });
+    contentEl.createEl("h2", { text: "Cross post to status.lol" });
 
     const textarea = contentEl.createEl("textarea", { cls: "status-input" });
     textarea.rows = 4;
@@ -41,7 +49,7 @@ export class StatusPostModal extends Modal {
     new Setting(contentEl)
       .setName("Post to social.lol")
       .addToggle((toggle) =>
-        toggle.setValue(true).onChange((val) => {
+        toggle.setValue(this.sharePublicly).onChange((val) => {
           this.sharePublicly = val;
         })
       );
@@ -58,7 +66,7 @@ export class StatusPostModal extends Modal {
       new Notice("Please enter a status.");
       return;
     }
-    this.onSubmit(text, !this.sharePublicly);
+    this.onSubmit(text, !this.sharePublicly); // true = skip Mastodon
     this.close();
   }
 

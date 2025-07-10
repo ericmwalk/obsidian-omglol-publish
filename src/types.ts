@@ -1,25 +1,39 @@
 export interface StatusPosterSettings {
-  username: string;
-  token: string;
-  apiToken: string;     // <-- used by weblog publishing
-  address: string;      // <-- used by weblog publishing
   skip_mastodon_post: boolean;
   default_emoji: string;
   saveToNote?: boolean;
   logNotePath?: string | null;
   alsoLogToDaily?: boolean;
-  enableWeblog?: boolean;
+  enableStatusPoster?: boolean; // ← NEW toggle
 }
 
-export const DEFAULT_SETTINGS: StatusPosterSettings = {
-  username: '',
-  token: '',
-  apiToken: '',
-  address: '',
-  skip_mastodon_post: false,
-  default_emoji: '📣',
-  saveToNote: false,
-  logNotePath: null,
+export interface WeblogPublisherSettings {
+  enableWeblog?: boolean; // ← existing toggle
+  enableRenaming: boolean;
+  slugWordCount: number;
+}
+
+export interface SharedOmgSettings {
+  username: string;
+  token: string;
+  apiToken: string;
+  address: string;
+}
+
+export interface CombinedSettings extends SharedOmgSettings, StatusPosterSettings, WeblogPublisherSettings {}
+
+export const DEFAULT_SETTINGS: CombinedSettings = {
+  username: "",
+  token: "",
+  apiToken: "",
+  address: "",
+  skip_mastodon_post: true,
+  default_emoji: "💬",
+  saveToNote: true,
+  logNotePath: "",
   alsoLogToDaily: false,
+  enableStatusPoster: true,
   enableWeblog: true,
+  enableRenaming: true,
+  slugWordCount: 5,
 };

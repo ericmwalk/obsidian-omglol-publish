@@ -1,13 +1,15 @@
 import { App, MarkdownView, Notice, Plugin, TFile, requestUrl, normalizePath } from "obsidian";
-import { StatusPosterSettings } from "./types";
+import { CombinedSettings } from "./types";
 
 export class WeblogPublisher {
   constructor(
     private app: App,
-    private settings: StatusPosterSettings,
+    private settings: CombinedSettings,
     private plugin: Plugin
   ) {
-    this.addCommand();
+    if (this.settings.enableWeblog !== false) {
+      this.addCommand();
+    }
   }
 
   private addCommand() {
@@ -19,6 +21,10 @@ export class WeblogPublisher {
   }
 
   public async publishCurrentNote() {
+        if (!this.settings.enableWeblog) {
+        new Notice("Weblog publishing is disabled in settings.");
+        return;
+      }
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view || !view.file) {
       new Notice("No active markdown file.");
@@ -120,7 +126,7 @@ export class WeblogPublisher {
       .replace(/[^a-zA-Z0-9\s]/g, "")
       .toLowerCase()
       .match(/\b\w+\b/g) || [];
-    return words.slice(0, 5).join("-");
+    return words.slice(0, this.settings.slugWordCount).join("-");
   }
 
   private extractTitleFromFilename(filename: string): string {
@@ -153,11 +159,12 @@ export class WeblogPublisher {
     await this.app.vault.modify(file, updated + needsBlankLine);
   }
 
+  
   private async renameFileWithSlug(file: TFile, date: string, slug: string) {
-    const safeDate = date.split("T")[0].split(" ")[0]; // Handles ISO or "YYYY-MM-DD HH:MM"
-    const newName = `${safeDate}_${slug}.md`;
+    if (!this.settings.enableRenaming) return;
+    const parsedDate = date.split("T")[0]; // e.g., 2025-07-08
+    const newName = `${parsedDate}_${slug}.md`;
     const newPath = normalizePath(file.path.replace(file.name, newName));
-
     if (newPath !== file.path) {
       await this.app.fileManager.renameFile(file, newPath);
     }

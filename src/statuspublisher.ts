@@ -1,5 +1,5 @@
 import { App, Notice, Plugin, TFile, requestUrl } from "obsidian";
-import { StatusPosterSettings } from "./types";
+import { CombinedSettings } from "./types";
 import { StatusPosterPlugin } from "./main";
 import moment from "moment";
 import GraphemeSplitter from "grapheme-splitter";
@@ -9,10 +9,12 @@ import { StatusPostModal } from "./statuspostmodal";
 export class StatusPublisher {
   constructor(
     private app: App,
-    private settings: StatusPosterSettings,
+    private settings: CombinedSettings,
     private plugin: StatusPosterPlugin
   ) {
-    this.addCommand();
+    if (this.settings.enableStatusPoster !== false) {
+      this.addCommand();
+    }
   }
 
   private addCommand() {
@@ -24,13 +26,21 @@ export class StatusPublisher {
   }
 
   public showStatusModal() {
+    if (!this.settings.enableStatusPoster) {
+      new Notice("Status.lol posting is disabled in settings.");
+      return;
+    }
+
+    const defaultSkip = this.settings.skip_mastodon_post ?? true;
+
     new StatusPostModal(
       this.app,
       this.plugin,
       this.settings,
       (status: string, skipMasto: boolean) => {
         this.postStatus(status, skipMasto);
-      }
+      },
+      defaultSkip // ← new argument
     ).open();
   }
 
