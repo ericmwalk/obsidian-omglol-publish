@@ -94,7 +94,8 @@ export class WeblogPublisher {
       if (entry) {
         const returnedSlug = entry.slug || slug;
         await this.injectOrUpdateFrontmatter(file, entry.entry, returnedSlug);
-        await this.renameFileWithSlug(file, date, returnedSlug);
+        const safeDate = this.getSafeDate(date);
+        await this.renameFileWithSlug(file, safeDate, returnedSlug);
         new Notice(entryId ? "🔁 Weblog post updated." : "✅ Weblog post published.");
       } else {
         throw new Error("Response missing 'entry' data.");
@@ -160,13 +161,28 @@ export class WeblogPublisher {
   }
 
   
+  private getSafeDate(date: string | undefined): string {
+    if (!date) {
+      return new Date().toISOString().split("T")[0]; // fallback to today's date
+    }
+
+    if (date.includes("T")) {
+      return date.split("T")[0];
+    }
+
+    // Assume already safe (e.g., "2025-07-09") but trim and sanitize anyway
+    return date.replace(/[:\\/]/g, "").trim();
+  }
+
   private async renameFileWithSlug(file: TFile, date: string, slug: string) {
     if (!this.settings.enableRenaming) return;
-    const parsedDate = date.split("T")[0]; // e.g., 2025-07-08
-    const newName = `${parsedDate}_${slug}.md`;
+    const safeDate = this.getSafeDate(date);
+    const sanitizedSlug = slug.replace(/[:\\/]/g, "").trim();
+    const newName = `${safeDate}_${sanitizedSlug}.md`;
     const newPath = normalizePath(file.path.replace(file.name, newName));
     if (newPath !== file.path) {
       await this.app.fileManager.renameFile(file, newPath);
     }
   }
+
 }
