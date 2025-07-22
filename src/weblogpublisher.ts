@@ -121,14 +121,25 @@ export class WeblogPublisher {
     return this.slugify(source);
   }
 
-  private slugify(input: string): string {
-    const words = input
-      .replace(/['"-]/g, "")
-      .replace(/[^a-zA-Z0-9\s]/g, "")
-      .toLowerCase()
-      .match(/\b\w+\b/g) || [];
-    return words.slice(0, this.settings.slugWordCount).join("-");
-  }
+private slugify(input: string): string {
+  // 1. Replace Markdown links with their text: [text](url) → text
+  let cleaned = input.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+
+  // 2. Replace HTML links with their inner text: <a href="...">text</a> → text
+  cleaned = cleaned.replace(/<a\s+[^>]*href=["'][^"']*["'][^>]*>(.*?)<\/a>/gi, "$1");
+
+  // 3. Remove bare URLs (http/https)
+  cleaned = cleaned.replace(/https?:\/\/\S+/g, "");
+
+  // 4. Clean and extract words
+  const words = cleaned
+    .replace(/['"-]/g, "")
+    .replace(/[^a-zA-Z0-9\s]/g, "")
+    .toLowerCase()
+    .match(/\b\w+\b/g) || [];
+
+  return words.slice(0, this.settings.slugWordCount).join("-");
+}
 
   private extractTitleFromFilename(filename: string): string {
     const name = filename.replace(/\.md$/, "");
@@ -163,23 +174,32 @@ export class WeblogPublisher {
   
   private getSafeDate(date: string | undefined): string {
     if (!date) {
-      return new Date().toISOString().split("T")[0]; // fallback to today's date
+      return new Date().toISOString().split("T")[0]; // fallback to today
     }
 
+    // If contains "T", split and take date
     if (date.includes("T")) {
       return date.split("T")[0];
     }
 
-    // Assume already safe (e.g., "2025-07-09") but trim and sanitize anyway
+    // If contains space, assume it's a space-separated date-time string
+    if (date.includes(" ")) {
+      return date.split(" ")[0];
+    }
+
+    // Otherwise return cleaned date string (just in case)
     return date.replace(/[:\\/]/g, "").trim();
   }
 
   private async renameFileWithSlug(file: TFile, date: string, slug: string) {
     if (!this.settings.enableRenaming) return;
-    const safeDate = this.getSafeDate(date);
-    const sanitizedSlug = slug.replace(/[:\\/]/g, "").trim();
-    const newName = `${safeDate}_${sanitizedSlug}.md`;
+
+    const parsedDate = this.getSafeDate(date); // Use your helper
+    const safeSlug = slug.replace(/[\\/:]/g, "-"); // extra sanitization just in case
+
+    const newName = `${parsedDate}_${safeSlug}.md`;
     const newPath = normalizePath(file.path.replace(file.name, newName));
+
     if (newPath !== file.path) {
       await this.app.fileManager.renameFile(file, newPath);
     }
