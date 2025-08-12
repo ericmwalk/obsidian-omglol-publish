@@ -10,6 +10,7 @@ export interface StatusPosterSettings {
 export interface WeblogPublisherSettings {
   enableWeblog?: boolean; // ← existing toggle
   enableRenaming: boolean;
+  renamePages: boolean;
   slugWordCount: number;
 }
 
@@ -35,5 +36,6 @@ export const DEFAULT_SETTINGS: CombinedSettings = {
   enableStatusPoster: true,
   enableWeblog: true,
   enableRenaming: true,
+  renamePages: false,
   slugWordCount: 5,
 };

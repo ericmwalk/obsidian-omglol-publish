@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, PluginSettingTab, Setting, setIcon } from "obsidian";
 import WeblogPublisher from "./main";
 
 export class SettingsTab extends PluginSettingTab {
@@ -17,25 +17,55 @@ export class SettingsTab extends PluginSettingTab {
       .setName("OMG.lol Username")
       .setDesc("Your omg.lol username")
       .addText(text =>
-        text.setPlaceholder("username")
-          .setValue(this.plugin.settings.username)
+        text
+          .setPlaceholder("username")
+          .setValue(this.plugin.settings.username || "")
           .onChange(async (value) => {
-            this.plugin.settings.username = value;
+            this.plugin.settings.username = value.trim(); // ← trim spaces
             await this.plugin.saveSettings();
           })
       );
 
-    new Setting(containerEl)
-      .setName("Token")
-      .setDesc("Your omg.lol API token")
-      .addText(text =>
-        text.setPlaceholder("token")
-          .setValue(this.plugin.settings.token)
-          .onChange(async (value) => {
-            this.plugin.settings.token = value;
-            await this.plugin.saveSettings();
-          })
-      );
+new Setting(containerEl)
+  .setName("Token")
+  .setDesc("Your omg.lol API token")
+  .addText(text => {
+    text
+      .setPlaceholder("token")
+      .setValue(this.plugin.settings.token || "")
+      .onChange(async (value) => {
+        this.plugin.settings.token = value.trim(); // trim spaces
+        await this.plugin.saveSettings();
+      });
+
+    // Start masked
+    // @ts-ignore
+    text.inputEl.type = "password";
+
+    // Create clickable icon element
+    const eyeIcon = containerEl.createEl("div", {
+      cls: "clickable-icon",
+    });
+    setIcon(eyeIcon, "eye");
+
+    eyeIcon.style.cursor = "pointer";
+    eyeIcon.style.marginLeft = "8px";
+    eyeIcon.style.display = "flex";
+    eyeIcon.style.alignItems = "center";
+
+    let visible = false;
+    eyeIcon.onclick = () => {
+      visible = !visible;
+      // @ts-ignore
+      text.inputEl.type = visible ? "text" : "password";
+      setIcon(eyeIcon, visible ? "eye-off" : "eye");
+    };
+
+    // Append the icon right next to the input
+    text.inputEl.parentElement?.appendChild(eyeIcon);
+
+    return text;
+  });
 
     // === Status.lol Feature Toggle ===
     new Setting(containerEl)
@@ -61,36 +91,59 @@ export class SettingsTab extends PluginSettingTab {
           })
       );
 
-    // === Weblog Settings ===
-    if (this.plugin.settings.enableWeblog) {
-      containerEl.createEl("h3", { text: "Weblog Settings" });
+// === Weblog Settings ===
+if (this.plugin.settings.enableWeblog) {
+  containerEl.createEl("h3", { text: "Weblog Settings" });
 
-      new Setting(containerEl)
-        .setName("Enable automatic renaming")
-        .setDesc("Rename note to use slug after publishing")
-        .addToggle(toggle =>
-          toggle.setValue(this.plugin.settings.enableRenaming)
-            .onChange(async (value) => {
-              this.plugin.settings.enableRenaming = value;
-              await this.plugin.saveSettings();
-            })
-        );
+  new Setting(containerEl)
+    .setName("Enable automatic renaming")
+    .setDesc("Rename note to use slug after publishing")
+    .addToggle(toggle =>
+      toggle
+        .setValue(this.plugin.settings.enableRenaming)
+        .onChange(async (value) => {
+          this.plugin.settings.enableRenaming = value;
 
-      new Setting(containerEl)
-        .setName("Slug word count")
-        .setDesc("Number of words to use in auto-generated slug")
-        .addText(text =>
-          text.setPlaceholder("5")
-            .setValue(this.plugin.settings.slugWordCount.toString())
-            .onChange(async (value) => {
-              const num = parseInt(value);
-              if (!isNaN(num) && num > 0) {
-                this.plugin.settings.slugWordCount = num;
-                await this.plugin.saveSettings();
-              }
-            })
-        );
-    }
+          // If main rename is turned off, force pages too off
+          if (!value) {
+            this.plugin.settings.renamePages = false;
+          }
+
+          await this.plugin.saveSettings();
+          this.display(); // re-render so dependent toggle appears/disappears
+        })
+    );
+
+  // Only show "Rename Pages" if renaming is enabled
+  if (this.plugin.settings.enableRenaming) {
+    new Setting(containerEl)
+      .setName("Rename Pages")
+      .setDesc("If frontmatter has `type: page` (case-insensitive), rename it as well. Leave off to keep pages’ filenames stable.")
+      .addToggle(toggle =>
+        toggle
+          .setValue(this.plugin.settings.renamePages ?? false)
+          .onChange(async (value) => {
+            this.plugin.settings.renamePages = value;
+            await this.plugin.saveSettings();
+          })
+      );
+  }
+
+  new Setting(containerEl)
+    .setName("Slug word count")
+    .setDesc("Number of words to use in auto-generated slug")
+    .addText(text =>
+      text.setPlaceholder("5")
+        .setValue(this.plugin.settings.slugWordCount.toString())
+        .onChange(async (value) => {
+          const num = parseInt(value);
+          if (!isNaN(num) && num > 0) {
+            this.plugin.settings.slugWordCount = num;
+            await this.plugin.saveSettings();
+          }
+        })
+    );
+}
 
     // === Status Settings ===
     if (this.plugin.settings.enableStatusPoster) {

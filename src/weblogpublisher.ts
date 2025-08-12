@@ -21,10 +21,11 @@ export class WeblogPublisher {
   }
 
   public async publishCurrentNote() {
-        if (!this.settings.enableWeblog) {
-        new Notice("Weblog publishing is disabled in settings.");
-        return;
-      }
+    if (!this.settings.enableWeblog) {
+      new Notice("Weblog publishing is disabled in settings.");
+      return;
+    }
+
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view || !view.file) {
       new Notice("No active markdown file.");
@@ -94,8 +95,19 @@ export class WeblogPublisher {
       if (entry) {
         const returnedSlug = entry.slug || slug;
         await this.injectOrUpdateFrontmatter(file, entry.entry, returnedSlug);
+
+        // NEW: Respect page-type + renamePages toggle
+        const isPage =
+          typeof metadata.type === "string" &&
+          metadata.type.toLowerCase() === "page";
+        const allowRename =
+          this.settings.enableRenaming && (!isPage || this.settings.renamePages);
+
         const safeDate = this.getSafeDate(date);
-        await this.renameFileWithSlug(file, safeDate, returnedSlug);
+        if (allowRename) {
+          await this.renameFileWithSlug(file, safeDate, returnedSlug);
+        }
+
         new Notice(entryId ? "🔁 Weblog post updated." : "✅ Weblog post published.");
       } else {
         throw new Error("Response missing 'entry' data.");
@@ -121,25 +133,25 @@ export class WeblogPublisher {
     return this.slugify(source);
   }
 
-private slugify(input: string): string {
-  // 1. Replace Markdown links with their text: [text](url) → text
-  let cleaned = input.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+  private slugify(input: string): string {
+    // 1. Replace Markdown links with their text: [text](url) → text
+    let cleaned = input.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
 
-  // 2. Replace HTML links with their inner text: <a href="...">text</a> → text
-  cleaned = cleaned.replace(/<a\s+[^>]*href=["'][^"']*["'][^>]*>(.*?)<\/a>/gi, "$1");
+    // 2. Replace HTML links with their inner text: <a href="...">text</a> → text
+    cleaned = cleaned.replace(/<a\s+[^>]*href=["'][^"']*["'][^>]*>(.*?)<\/a>/gi, "$1");
 
-  // 3. Remove bare URLs (http/https)
-  cleaned = cleaned.replace(/https?:\/\/\S+/g, "");
+    // 3. Remove bare URLs (http/https)
+    cleaned = cleaned.replace(/https?:\/\/\S+/g, "");
 
-  // 4. Clean and extract words
-  const words = cleaned
-    .replace(/['"-]/g, "")
-    .replace(/[^a-zA-Z0-9\s]/g, "")
-    .toLowerCase()
-    .match(/\b\w+\b/g) || [];
+    // 4. Clean and extract words
+    const words = cleaned
+      .replace(/['"-]/g, "")
+      .replace(/[^a-zA-Z0-9\s]/g, "")
+      .toLowerCase()
+      .match(/\b\w+\b/g) || [];
 
-  return words.slice(0, this.settings.slugWordCount).join("-");
-}
+    return words.slice(0, this.settings.slugWordCount).join("-");
+  }
 
   private extractTitleFromFilename(filename: string): string {
     const name = filename.replace(/\.md$/, "");
@@ -171,31 +183,24 @@ private slugify(input: string): string {
     await this.app.vault.modify(file, updated + needsBlankLine);
   }
 
-  
   private getSafeDate(date: string | undefined): string {
     if (!date) {
       return new Date().toISOString().split("T")[0]; // fallback to today
     }
-
-    // If contains "T", split and take date
     if (date.includes("T")) {
       return date.split("T")[0];
     }
-
-    // If contains space, assume it's a space-separated date-time string
     if (date.includes(" ")) {
       return date.split(" ")[0];
     }
-
-    // Otherwise return cleaned date string (just in case)
     return date.replace(/[:\\/]/g, "").trim();
   }
 
   private async renameFileWithSlug(file: TFile, date: string, slug: string) {
     if (!this.settings.enableRenaming) return;
 
-    const parsedDate = this.getSafeDate(date); // Use your helper
-    const safeSlug = slug.replace(/[\\/:]/g, "-"); // extra sanitization just in case
+    const parsedDate = this.getSafeDate(date);
+    const safeSlug = slug.replace(/[\\/:]/g, "-");
 
     const newName = `${parsedDate}_${safeSlug}.md`;
     const newPath = normalizePath(file.path.replace(file.name, newName));
@@ -204,5 +209,4 @@ private slugify(input: string): string {
       await this.app.fileManager.renameFile(file, newPath);
     }
   }
-
 }
