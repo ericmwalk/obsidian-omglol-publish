@@ -1,8 +1,8 @@
 import { App, PluginSettingTab, Setting, setIcon } from "obsidian";
-import WeblogPublisher from "./main";
+import OmglolPublish from "./main";
 
 export class SettingsTab extends PluginSettingTab {
-  constructor(app: App, private plugin: WeblogPublisher) {
+  constructor(app: App, private plugin: OmglolPublish) {
     super(app, plugin);
   }
 
@@ -10,7 +10,7 @@ export class SettingsTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "omg.lol Plugin Settings" });
+    containerEl.createEl("h1", { text: "omg.lol Plugin Settings" });
 
     // === Shared OMG Settings ===
     new Setting(containerEl)
@@ -21,55 +21,53 @@ export class SettingsTab extends PluginSettingTab {
           .setPlaceholder("username")
           .setValue(this.plugin.settings.username || "")
           .onChange(async (value) => {
-            this.plugin.settings.username = value.trim(); // ← trim spaces
+            this.plugin.settings.username = value.trim();
             await this.plugin.saveSettings();
           })
       );
 
-new Setting(containerEl)
-  .setName("Token")
-  .setDesc("Your omg.lol API token")
-  .addText(text => {
-    text
-      .setPlaceholder("token")
-      .setValue(this.plugin.settings.token || "")
-      .onChange(async (value) => {
-        this.plugin.settings.token = value.trim(); // trim spaces
-        await this.plugin.saveSettings();
+    new Setting(containerEl)
+      .setName("Token")
+      .setDesc("Your omg.lol API token")
+      .addText(text => {
+        text
+          .setPlaceholder("token")
+          .setValue(this.plugin.settings.token || "")
+          .onChange(async (value) => {
+            this.plugin.settings.token = value.trim();
+            await this.plugin.saveSettings();
+          });
+
+        // Start masked
+        // @ts-ignore
+        text.inputEl.type = "password";
+
+        // Eye toggle
+        const eyeIcon = containerEl.createEl("div", { cls: "clickable-icon" });
+        setIcon(eyeIcon, "eye");
+        eyeIcon.style.cursor = "pointer";
+        eyeIcon.style.marginLeft = "8px";
+        eyeIcon.style.display = "flex";
+        eyeIcon.style.alignItems = "center";
+
+        let visible = false;
+        eyeIcon.onclick = () => {
+          visible = !visible;
+          // @ts-ignore
+          text.inputEl.type = visible ? "text" : "password";
+          setIcon(eyeIcon, visible ? "eye-off" : "eye");
+        };
+
+        text.inputEl.parentElement?.appendChild(eyeIcon);
+
+        return text;
       });
 
-    // Start masked
-    // @ts-ignore
-    text.inputEl.type = "password";
-
-    // Create clickable icon element
-    const eyeIcon = containerEl.createEl("div", {
-      cls: "clickable-icon",
-    });
-    setIcon(eyeIcon, "eye");
-
-    eyeIcon.style.cursor = "pointer";
-    eyeIcon.style.marginLeft = "8px";
-    eyeIcon.style.display = "flex";
-    eyeIcon.style.alignItems = "center";
-
-    let visible = false;
-    eyeIcon.onclick = () => {
-      visible = !visible;
-      // @ts-ignore
-      text.inputEl.type = visible ? "text" : "password";
-      setIcon(eyeIcon, visible ? "eye-off" : "eye");
-    };
-
-    // Append the icon right next to the input
-    text.inputEl.parentElement?.appendChild(eyeIcon);
-
-    return text;
-  });
-
-    // === Status.lol Feature Toggle ===
+    containerEl.createEl("h3", { text: "omg.lol Modules Enabled" });
+    // === Status.lol ===
     new Setting(containerEl)
-      .setName("Enable status.lol features")
+      .setName("Status.lol")
+      .setDesc("Enable posting to status.lol")
       .addToggle(toggle =>
         toggle.setValue(this.plugin.settings.enableStatusPoster ?? true)
           .onChange(async (value) => {
@@ -78,10 +76,10 @@ new Setting(containerEl)
             this.display();
           })
       );
-
-    // === Weblog Feature Toggle ===
+    // === Weblog.lol ===
     new Setting(containerEl)
-      .setName("Enable weblog.lol features")
+      .setName("Weblog.lol")
+      .setDesc("Enable publishing to weblog.lol")
       .addToggle(toggle =>
         toggle.setValue(this.plugin.settings.enableWeblog ?? true)
           .onChange(async (value) => {
@@ -90,64 +88,34 @@ new Setting(containerEl)
             this.display();
           })
       );
-
-// === Weblog Settings ===
-if (this.plugin.settings.enableWeblog) {
-  containerEl.createEl("h3", { text: "Weblog Settings" });
-
-  new Setting(containerEl)
-    .setName("Enable automatic renaming")
-    .setDesc("Rename note to use slug after publishing")
-    .addToggle(toggle =>
-      toggle
-        .setValue(this.plugin.settings.enableRenaming)
-        .onChange(async (value) => {
-          this.plugin.settings.enableRenaming = value;
-
-          // If main rename is turned off, force pages too off
-          if (!value) {
-            this.plugin.settings.renamePages = false;
-          }
-
-          await this.plugin.saveSettings();
-          this.display(); // re-render so dependent toggle appears/disappears
-        })
-    );
-
-  // Only show "Rename Pages" if renaming is enabled
-  if (this.plugin.settings.enableRenaming) {
+    // === some.pics ===
     new Setting(containerEl)
-      .setName("Rename Pages")
-      .setDesc("If frontmatter has `type: page` (case-insensitive), rename it as well. Leave off to keep pages’ filenames stable.")
+      .setName("some.pics")
+      .setDesc("Enable image uploads to some.pics")
       .addToggle(toggle =>
-        toggle
-          .setValue(this.plugin.settings.renamePages ?? false)
+        toggle.setValue(this.plugin.settings.enablePics ?? true)
           .onChange(async (value) => {
-            this.plugin.settings.renamePages = value;
+            this.plugin.settings.enablePics = value;
             await this.plugin.saveSettings();
+            this.display();
           })
       );
-  }
+      // === Pastebin ===
+      new Setting(containerEl)
+        .setName("paste.lol")
+        .setDesc("Enable publishing to paste.lol")
+        .addToggle((toggle) =>
+          toggle
+            .setValue(this.plugin.settings.enablePastebin)
+            .onChange(async (value) => {
+              this.plugin.settings.enablePastebin = value;
+              await this.plugin.saveSettings();
+            })
+        );
 
-  new Setting(containerEl)
-    .setName("Slug word count")
-    .setDesc("Number of words to use in auto-generated slug")
-    .addText(text =>
-      text.setPlaceholder("5")
-        .setValue(this.plugin.settings.slugWordCount.toString())
-        .onChange(async (value) => {
-          const num = parseInt(value);
-          if (!isNaN(num) && num > 0) {
-            this.plugin.settings.slugWordCount = num;
-            await this.plugin.saveSettings();
-          }
-        })
-    );
-}
-
-    // === Status Settings ===
+    // === Status.lol Settings ===
     if (this.plugin.settings.enableStatusPoster) {
-      containerEl.createEl("h3", { text: "Status Settings" });
+      containerEl.createEl("h4", { text: "Status Settings" });
 
       new Setting(containerEl)
         .setName("Default emoji")
@@ -205,6 +173,147 @@ if (this.plugin.settings.enableWeblog) {
           toggle.setValue(this.plugin.settings.alsoLogToDaily ?? false)
             .onChange(async (value) => {
               this.plugin.settings.alsoLogToDaily = value;
+              await this.plugin.saveSettings();
+            })
+        );
+    }
+
+    // === Weblog.lol Settings===
+    if (this.plugin.settings.enableWeblog) {
+      containerEl.createEl("h4", { text: "Weblog Settings" });
+
+      new Setting(containerEl)
+        .setName("Enable automatic renaming")
+        .setDesc("Rename note to use slug after publishing")
+        .addToggle(toggle =>
+          toggle
+            .setValue(this.plugin.settings.enableRenaming)
+            .onChange(async (value) => {
+              this.plugin.settings.enableRenaming = value;
+              if (!value) this.plugin.settings.renamePages = false;
+              await this.plugin.saveSettings();
+              this.display();
+            })
+        );
+
+      if (this.plugin.settings.enableRenaming) {
+        new Setting(containerEl)
+          .setName("Rename Pages")
+          .setDesc("If frontmatter has `type: page`, rename those too")
+          .addToggle(toggle =>
+            toggle
+              .setValue(this.plugin.settings.renamePages ?? false)
+              .onChange(async (value) => {
+                this.plugin.settings.renamePages = value;
+                await this.plugin.saveSettings();
+              })
+          );
+      }
+
+      new Setting(containerEl)
+        .setName("Slug word count")
+        .setDesc("Number of words to use in auto-generated slug")
+        .addText(text =>
+          text.setPlaceholder("5")
+            .setValue(this.plugin.settings.slugWordCount.toString())
+            .onChange(async (value) => {
+              const num = parseInt(value);
+              if (!isNaN(num) && num > 0) {
+                this.plugin.settings.slugWordCount = num;
+                await this.plugin.saveSettings();
+              }
+            })
+        );
+    }
+
+    // === some.pics Settings===
+    if (this.plugin.settings.enablePics) {
+      containerEl.createEl("h4", { text: "some.pics Settings" });
+
+      new Setting(containerEl)
+        .setName("Default tags")
+        .setDesc("Tags to apply to all uploaded images (comma or space separated)")
+        .addText(text =>
+          text
+            .setPlaceholder("obsidian upload")
+            .setValue(this.plugin.settings.defaultPicsTags || "")
+            .onChange(async (value) => {
+              this.plugin.settings.defaultPicsTags = value.trim();
+              await this.plugin.saveSettings();
+            })
+        );
+
+      new Setting(containerEl)
+        .setName("ChatGPT API key (for alt text)")
+        .setDesc("Optional: provide an API key to auto-generate alt text for images")
+        .addText(text => {
+          text
+            .setPlaceholder("sk-...")
+            .setValue(this.plugin.settings.chatgptApiKey || "")
+            .onChange(async (value) => {
+              this.plugin.settings.chatgptApiKey = value.trim();
+              await this.plugin.saveSettings();
+            });
+
+          // Start masked
+          // @ts-ignore
+          text.inputEl.type = "password";
+
+          // Eye toggle
+          const eyeIcon = containerEl.createEl("div", { cls: "clickable-icon" });
+          setIcon(eyeIcon, "eye");
+          eyeIcon.style.cursor = "pointer";
+          eyeIcon.style.marginLeft = "8px";
+          eyeIcon.style.display = "flex";
+          eyeIcon.style.alignItems = "center";
+
+          let visible = false;
+          eyeIcon.onclick = () => {
+            visible = !visible;
+            // @ts-ignore
+            text.inputEl.type = visible ? "text" : "password";
+            setIcon(eyeIcon, visible ? "eye-off" : "eye");
+          };
+
+          text.inputEl.parentElement?.appendChild(eyeIcon);
+
+          return text;
+        });
+
+      new Setting(containerEl)
+        .setName("Maintain upload log")
+        .setDesc("Save a record of each uploaded picture in a log note")
+        .addToggle(toggle =>
+          toggle.setValue(this.plugin.settings.maintainPicsLog ?? false)
+            .onChange(async (value) => {
+              this.plugin.settings.maintainPicsLog = value;
+              await this.plugin.saveSettings();
+              this.display();
+            })
+        );
+
+      if (this.plugin.settings.maintainPicsLog) {
+        new Setting(containerEl)
+          .setName("Log note path")
+          .setDesc("Path to the log note file")
+          .addText(text =>
+            text
+              .setPlaceholder("_pics-upload-log.md")
+              .setValue(this.plugin.settings.picsLogPath || "")
+              .onChange(async (value) => {
+                this.plugin.settings.picsLogPath = value.trim();
+                await this.plugin.saveSettings();
+              })
+          );
+      }
+
+      new Setting(containerEl)
+        .setName("Delete after upload")
+        .setDesc("Remove original image file from vault after uploading")
+        .addToggle(toggle =>
+          toggle.setValue(this.plugin.settings.deleteAfterUpload ?? false)
+            .onChange(async (value) => {
+              this.plugin.settings.deleteAfterUpload = value;
               await this.plugin.saveSettings();
             })
         );

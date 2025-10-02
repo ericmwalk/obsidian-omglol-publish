@@ -1,5 +1,5 @@
 import { App, Modal, Notice, ButtonComponent, Setting } from "obsidian";
-import { StatusPosterPlugin } from "./main";
+import { OmglolPublish } from "./main";
 import { StatusPosterSettings } from "./types";
 
 export class StatusPostModal extends Modal {
@@ -12,7 +12,7 @@ export class StatusPostModal extends Modal {
 
   constructor(
     app: App,
-    public plugin: StatusPosterPlugin,
+    public plugin: OmglolPublish,
     settings: StatusPosterSettings,
     onSubmit: (status: string, share: boolean) => void,
     defaultSkipMasto: boolean
@@ -28,7 +28,7 @@ export class StatusPostModal extends Modal {
   onOpen() {
     const { contentEl } = this;
 
-    contentEl.createEl("h2", { text: "Cross post to status.lol" });
+    contentEl.createEl("h2", { text: "Post to status.lol" });
 
     const textarea = contentEl.createEl("textarea", { cls: "status-input" });
     textarea.rows = 4;

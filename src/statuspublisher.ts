@@ -1,6 +1,6 @@
 import { App, Notice, Plugin, TFile, requestUrl } from "obsidian";
 import { CombinedSettings } from "./types";
-import { StatusPosterPlugin } from "./main";
+import { OmglolPublish } from "./main";
 import moment from "moment";
 import GraphemeSplitter from "grapheme-splitter";
 import { getDailyNote, createDailyNote, getAllDailyNotes } from "obsidian-daily-notes-interface";
@@ -10,7 +10,7 @@ export class StatusPublisher {
   constructor(
     private app: App,
     private settings: CombinedSettings,
-    private plugin: StatusPosterPlugin
+    private plugin: OmglolPublish
   ) {
     if (this.settings.enableStatusPoster !== false) {
       this.addCommand();
@@ -109,7 +109,7 @@ export class StatusPublisher {
     const fullPath = `${notePath}.md`;
     const timestamp = moment().format("YYYY-MM-DD HH:mm");
     const safeStatus = status.replace(/[\[\]]/g, "\\$&");
-    const content = `\n- **${timestamp}**: [${safeStatus}](${url || "#"})`;
+    const content = `\n- **${timestamp}**: (*[Link to status.lol](${url || "#"})*) - ${safeStatus}`;
 
     const file = this.app.vault.getAbstractFileByPath(fullPath);
     if (file instanceof TFile) {

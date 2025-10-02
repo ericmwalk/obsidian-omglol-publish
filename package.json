@@ -1,7 +1,7 @@
 {
 	"name": "omglol-publish",
-	"version": "2.0.0",
-	"description": "Plugin to work with OMG.lol statuslog and weblog",
+	"version": "2.5.0",
+	"description": "Plugin to work with OMG.lol statuslog, weblog and some.pics",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
@@ -22,6 +22,7 @@
 		"typescript": "4.7.4"
 	},
 	"dependencies": {
+		"exifr": "^7.1.3",
 		"grapheme-splitter": "^1.0.4",
 		"obsidian-daily-notes-interface": "^0.9.4"
 	}

@@ -1,5 +1,6 @@
 import { App, MarkdownView, Notice, Plugin, TFile, requestUrl, normalizePath } from "obsidian";
 import { CombinedSettings } from "./types";
+import { WeblogFrontmatterModal, WeblogFrontmatterValues } from "./weblogfrontmattermodal";
 
 export class WeblogPublisher {
   constructor(
@@ -36,8 +37,16 @@ export class WeblogPublisher {
     const content = await this.app.vault.read(file);
     const metadata = this.app.metadataCache.getCache(file.path)?.frontmatter;
 
+    // If no frontmatter ask for the data needed to publish
     if (!metadata) {
-      new Notice("Note is missing frontmatter.");
+      this.promptForFrontmatter(file, content);
+      return;
+    }
+
+    // If frontmatter exists but status is invalid ask
+    const statusValue = metadata.status?.toLowerCase();
+    if (statusValue !== "published" && statusValue !== "draft") {
+      this.promptForFrontmatter(file, content, metadata);
       return;
     }
 
@@ -209,4 +218,34 @@ export class WeblogPublisher {
       await this.app.fileManager.renameFile(file, newPath);
     }
   }
+
+  private promptForFrontmatter(file: TFile, content: string, metadata?: any) {
+    const existing: Partial<WeblogFrontmatterValues> = {
+      title: metadata?.title,
+      date: metadata?.date,
+      tags: Array.isArray(metadata?.tags) ? metadata.tags : [],
+      status: metadata?.status,
+    };
+
+    new WeblogFrontmatterModal(this.app, async (values) => {
+      const fm = [
+        "---",
+        values.title ? `title: ${values.title}` : "",
+        `date: ${values.date}`,
+        `status: ${values.status}`,
+        values.tags.length
+          ? `tags:\n${values.tags.map(t => `  - ${t}`).join("\n")}`
+          : "",
+        "---",
+      ].filter(Boolean).join("\n");
+
+      await this.app.vault.modify(file, `${fm}\n\n${this.stripFrontmatter(content)}`);
+
+      // wait for metadataCache refresh, then retry publish
+      setTimeout(() => {
+        this.publishCurrentNote();
+      }, 300);
+    }, existing).open();
+  }
+
 }

@@ -1,9 +1,9 @@
 {
 	"id": "statuslol-post",
 	"name": "OMG.lol Publisher",
-	"version": "2.0.0",
+	"version": "2.5.0",
 	"minAppVersion": "0.15.0",
-	"description": "Plugin allows you to post to weblogs.lol as well as statuses to status.lol.",
+	"description": "Plugin allows you to post to weblogs.lol, status.lol, and some.pics.",
 	"author": "Eric Walker",
 	"authorUrl": "https://runs.lol",
 	"isDesktopOnly": false
