@@ -291,6 +291,17 @@ export class SettingsTab extends PluginSettingTab {
               this.display();
             })
         );
+      new Setting(containerEl)
+        .setName("Monthly log rotation")
+        .setDesc("Split some.pics logs into monthly files with an index")
+        .addToggle(toggle =>
+          toggle
+            .setValue(this.plugin.settings.monthlyPicsLogs)
+            .onChange(async (value) => {
+              this.plugin.settings.monthlyPicsLogs = value;
+              await this.plugin.saveSettings();
+            })
+        );
 
       if (this.plugin.settings.maintainPicsLog) {
         new Setting(containerEl)

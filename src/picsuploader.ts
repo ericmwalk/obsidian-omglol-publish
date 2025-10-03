@@ -4,7 +4,8 @@ import { App, Notice, TFile, MarkdownView, requestUrl, Editor } from "obsidian";
 declare const moment: any;
 import { CombinedSettings } from "./types";
 import OmglolPublish from "./main";
-import exifr from "exifr"; // for the Log
+import exifr from "exifr"; // for EXIF log
+import { PicUploadModal } from "./picsuploadmodal";
 
 export class PicsUploader {
   app: App;
@@ -27,8 +28,8 @@ export class PicsUploader {
 
     const cursor = editor.getCursor();
     const line = editor.getLine(cursor.line);
-
     const match = line.match(/!\[\[(.*?)\]\]/);
+
     if (!match) {
       new Notice("No image embed found on this line.");
       return;
@@ -47,8 +48,8 @@ export class PicsUploader {
 
     const editor = view.editor;
     const text = editor.getValue();
-
     const matches = [...text.matchAll(/!\[\[(.*?)\]\]/g)];
+
     if (matches.length === 0) {
       new Notice("No image embeds found in this note.");
       return;
@@ -56,8 +57,6 @@ export class PicsUploader {
 
     let uploaded = 0;
     const replacements: { embed: string; replacement: string }[] = [];
-
-    // Persistent notice for progress
     const progressNotice = new Notice("Preparing uploads...", 0);
 
     for (const [fullMatch, filename] of matches) {
@@ -76,8 +75,6 @@ export class PicsUploader {
           replacement: `![${altText}](${uploadedUrl})`,
         });
 
-        await this.logUpload(file.basename, uploadedUrl, file);
-
         if (this.settings.deleteAfterUpload) {
           await this.app.vault.delete(file);
         }
@@ -93,13 +90,11 @@ export class PicsUploader {
     }
     editor.setValue(updated);
 
-    // Done → clear the progress notice
     progressNotice.hide();
     new Notice(`Done: ${uploaded} image(s) uploaded to some.pics ✅`);
   }
 
-
-  // === Helper: Upload a file + replace its embed (single line mode) ===
+  // === Upload a single embed (helper) ===
   private async uploadAndReplace(editor: Editor, embed: string, filename: string) {
     const file = this.app.metadataCache.getFirstLinkpathDest(filename, "");
     if (!(file instanceof TFile)) {
@@ -115,8 +110,6 @@ export class PicsUploader {
 
       const updated = editor.getValue().replace(embed, `![${altText}](${uploadedUrl})`);
       editor.setValue(updated);
-
-      await this.logUpload(file.basename, uploadedUrl);
 
       if (this.settings.deleteAfterUpload) {
         await this.app.vault.delete(file);
@@ -170,10 +163,6 @@ export class PicsUploader {
       tags: this.settings.defaultPicsTags || "",
     };
 
-    // Rules for hide_from_public:
-    // - Bulk (hidden === undefined) → always true
-    // - Modal (hidden === true) → true
-    // - Modal (hidden === false) → omit field (defaults to public)
     if (hidden === undefined || hidden === true) {
       body.hide_from_public = true;
     }
@@ -192,9 +181,11 @@ export class PicsUploader {
       console.warn("Metadata update failed:", putResp);
     }
 
+    // Always log
+    await this.logUpload(file.basename, uploadedUrl, file);
+
     return uploadedUrl;
   }
-
 
   // === Alt text generator (GPT integration) ===
   private async generateAltText(imageUrl: string, fallback: string): Promise<string> {
@@ -211,7 +202,7 @@ export class PicsUploader {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gpt-4o-mini", // or gpt-4o if you want vision
+          model: "gpt-4o-mini",
           messages: [
             {
               role: "system",
@@ -243,7 +234,6 @@ export class PicsUploader {
 
     const noteFile = this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
     const noteLink = noteFile ? `[[${noteFile.basename}]]` : "";
-
     const uploadedOn = moment().format("YYYY-MM-DD HH:mm:ss");
 
     let takenOn = "";
@@ -259,24 +249,92 @@ export class PicsUploader {
       }
     }
 
-    const logRow = `| ${originalFilename} | ${uploadedUrl} | ${noteLink} | ${uploadedOn} | ${takenOn} |\n`;
+    // Build links
+    const filePart = uploadedUrl.split("/").pop() || "";
+    const picId = filePart.split(".")[0];
+    const namespace = uploadedUrl.split("/")[3];
+    const webViewUrl = `https://some.pics/${namespace}/${picId}`;
+    const editLink = `[✏️](edit-somepics-${picId})`;
+    const webLink = `[📷](${webViewUrl})`;
+    const uploadedOnLink = `[${uploadedOn}](${uploadedUrl})`;
 
-    const logPath = this.settings.picsLogPath || "_pics-upload-log.md";
+    const logRow =
+      `| ${editLink} | ${webLink} | ${originalFilename} | ${noteLink} | ${uploadedOnLink} | ${takenOn} |\n`;
+
     try {
-      const existing = await this.app.vault.adapter.read(logPath).catch(() => null);
-      if (!existing) {
-        const header =
-          `# some.pics Upload Log\n\n` +
-          `| Original Filename | Uploaded URL | Note | Uploaded On | Taken On |\n` +
-          `|-------------------|--------------|------|-------------|----------|\n`;
-        await this.app.vault.adapter.write(logPath, header + logRow);
+      const basePath = this.settings.picsLogPath?.trim() || "_pics-upload-log.md";
+      const baseName = basePath.replace(/\.md$/, "");
+      const indexPath = basePath;
+
+      if (this.settings.monthlyPicsLogs) {
+        const monthKey = moment().format("YYYY-MM");
+
+        // Folder with same name as index (minus .md)
+        const monthlyFolder = baseName;
+        const logPath = `${monthlyFolder}/${monthKey}.md`;
+
+        // ✅ Ensure monthly folder exists
+        const folderExists = await this.app.vault.adapter.stat(monthlyFolder).catch(() => null);
+        if (!folderExists) {
+          await this.app.vault.createFolder(monthlyFolder).catch((err) => {
+            console.error("Failed to create monthly log folder:", err);
+          });
+        }
+
+        const existing = await this.app.vault.adapter.read(logPath).catch(() => null);
+        if (!existing) {
+          const header =
+            `# ${baseName} (${monthKey})\n\n` +
+            `| Edit | Web | Original Filename | Note | Uploaded On | Taken On |\n` +
+            `|------|-----|-------------------|------|-------------|----------|\n`;
+          await this.app.vault.adapter.write(logPath, header + logRow);
+
+          // Update index
+          const indexExisting = await this.app.vault.adapter.read(indexPath).catch(() => null);
+          const monthLink = `- [[${logPath}]]\n`; // vault-relative
+          if (!indexExisting) {
+            await this.app.vault.adapter.write(indexPath, `# ${baseName} Index\n\n` + monthLink);
+          } else if (!indexExisting.includes(logPath)) {
+            await this.app.vault.adapter.append(indexPath, monthLink);
+          }
+        } else {
+          await this.app.vault.adapter.append(logPath, logRow);
+        }
       } else {
-        await this.app.vault.adapter.append(logPath, logRow);
+        // === Single log file ===
+        const logPath = indexPath;
+
+        // ✅ Ensure folder for single log exists if nested
+        const folder = logPath.split("/").slice(0, -1).join("/");
+        if (folder) {
+          const folderExists = await this.app.vault.adapter.stat(folder).catch(() => null);
+          if (!folderExists) {
+            await this.app.vault.createFolder(folder).catch((err) => {
+              console.error("Failed to create log folder:", err);
+            });
+          }
+        }
+
+        const existing = await this.app.vault.adapter.read(logPath).catch(() => null);
+        if (!existing) {
+          const header =
+            `# ${baseName}\n\n` +
+            `| Edit | Web | Original Filename | Note | Uploaded On | Taken On |\n` +
+            `|------|-----|-------------------|------|-------------|----------|\n`;
+          await this.app.vault.adapter.write(logPath, header + logRow);
+        } else {
+          await this.app.vault.adapter.append(logPath, logRow);
+        }
       }
     } catch (err) {
       console.error("Failed to update pics upload log:", err);
     }
   }
+
+
+
+
+
 
   // === ArrayBuffer → Base64 ===
   private arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -289,9 +347,7 @@ export class PicsUploader {
     return btoa(binary);
   }
 
-
   public resolveImageFromContext(): TFile | null {
-    // Check if cursor is on an embed
     const editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
     if (editor) {
       const cursor = editor.getCursor();
@@ -303,13 +359,128 @@ export class PicsUploader {
       }
     }
 
-    // Otherwise fall back to active file
     const activeFile = this.app.workspace.getActiveFile();
     if (activeFile && activeFile.extension.match(/(png|jpg|jpeg|gif|webp)$/i)) {
       return activeFile;
     }
-
     return null;
   }
 
+  // === Update metadata (edit mode) ===
+  public async updateMetadata(
+    picId: string,
+    description: string,
+    tags: string,
+    hidden: boolean,
+    altText: string
+  ): Promise<void> {
+    const body: any = {
+      description,
+      alt_text: altText,
+      tags: tags || "",
+    };
+
+    if (hidden === undefined || hidden === true) {
+      body.hide_from_public = true;
+    }
+
+    // For Debugging console.log("Update metadata body:", body);
+
+    const resp = await requestUrl({
+      url: `https://api.omg.lol/address/${this.settings.username}/pics/${picId}`,
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${this.settings.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (resp.status !== 200) {
+      console.error("Update failed response:", resp);
+      new Notice("Update failed. See console.");
+    } else {
+      new Notice("Metadata updated ✅");
+    }
+  }
+
+  // === Fetch current metadata for a pic (for editing UI) ===
+  public async fetchMetadata(picId: string): Promise<any | null> {
+    try {
+      const resp = await requestUrl({
+        url: `https://api.omg.lol/address/${this.settings.username}/pics/${picId}`,
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${this.settings.token}`,
+        },
+      });
+
+      if (resp.status !== 200) {
+        console.error("Failed to fetch metadata:", resp);
+        new Notice("Failed to fetch photo info.");
+        return null;
+      }
+
+      const data = resp.json?.response?.pic;
+      if (!data) {
+        console.error("Unexpected API format:", resp.json);
+        return null;
+      }
+
+      // ✅ Always use API-provided URL if available
+      let finalUrl = data.url;
+      if (!finalUrl) {
+        // Fallback: reconstruct using extension
+        let ext = "jpg";
+        if (data.exif?.["File Type Extension"]) {
+          ext = data.exif["File Type Extension"].toLowerCase();
+        } else if (data.mime) {
+          ext = (data.mime?.split("/")?.[1] || "jpg").toLowerCase();
+        }
+        finalUrl = `https://cdn.some.pics/${data.address}/${data.id}.${ext}`;
+      }
+
+      return {
+        ...data,
+        url: finalUrl,
+      };
+    } catch (err) {
+      console.error("Error fetching metadata:", err);
+      return null;
+    }
+  }
+
+
+
+  // === Open the edit modal for an existing some.pics image ===
+  public async openEditModal(picId: string) {
+    try {
+      const existing = await this.fetchMetadata(picId);
+
+      if (!existing) {
+        new Notice("Could not fetch photo info for editing.");
+        return;
+      }
+
+      // debugging console.log("Fetched metadata for edit:", existing);
+
+      if (!("description" in existing) && !("url" in existing)) {
+        console.warn("Unexpected metadata format:", existing);
+        new Notice("Unexpected photo data format. Check console.");
+        return;
+      }
+
+      const modal = new PicUploadModal(
+        this.app,
+        this,
+        null, // no local file when editing
+        picId,
+        existing
+      );
+      modal.open();
+    } catch (err) {
+      console.error("Failed to open edit modal:", err);
+      new Notice("Failed to open edit modal. See console for details.");
+    }
+  }
 }

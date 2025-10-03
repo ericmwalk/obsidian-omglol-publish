@@ -21,6 +21,7 @@ export interface PicsUploaderSettings {
   deleteAfterUpload?: boolean;
   maintainPicsLog?: boolean;
   picsLogPath?: string;
+  monthlyPicsLogs: boolean;
 
 }
 export interface PastebinSettings {
@@ -67,6 +68,7 @@ export const DEFAULT_SETTINGS: CombinedSettings = {
   chatgptApiKey: "",
   deleteAfterUpload: false,
   maintainPicsLog: false,
+  monthlyPicsLogs: false,
   picsLogPath: "_pics-upload-log.md",
 
   // Pastebin
