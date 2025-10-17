@@ -13,6 +13,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # ensures full history so git push/pull work correctly
 
       - name: Use Node.js
         uses: actions/setup-node@v4
@@ -49,8 +51,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add manifest.json versions.json
-          git commit -m "Bump version to $version" || echo "No changes to commit"
-          git push
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Bump version to $version"
+            git pull --rebase origin main || echo "No rebase needed"
+            git push origin HEAD:main
+          fi
 
       - name: Zip plugin
         run: |
