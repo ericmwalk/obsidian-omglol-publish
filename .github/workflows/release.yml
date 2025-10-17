@@ -3,33 +3,65 @@ name: Release Obsidian plugin
 on:
   push:
     tags:
-      - "*"
+      - "v*"
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Use Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: "18.x"
 
-      - name: Build plugin
+      - name: Install and build
         run: |
-          npm install
+          npm ci
           npm run build
 
-      - name: Create release
+      - name: Validate tag matches manifest version
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          version=$(jq -r .version manifest.json)
+          if [ "$tag" != "v$version" ]; then
+            echo "❌ Tag ($tag) doesn't match manifest.json version ($version)"
+            exit 1
+          fi
+          echo "✅ Tag matches manifest version: $version"
+
+      - name: Update versions.json
+        run: |
+          version=$(jq -r .version manifest.json)
+          echo "Updating versions.json for version $version"
+          if [ ! -f versions.json ]; then
+            echo "{}" > versions.json
+          fi
+          jq --arg v "v$version" --arg ver "$version" '.[$v]=$ver' versions.json > tmp.$$.json && mv tmp.$$.json versions.json
+          cat versions.json
+
+      - name: Commit updated versions.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add versions.json
+          git commit -m "Update versions.json for $version" || echo "No changes to commit"
+          git push
+
+      - name: Zip plugin
+        run: |
+          zip -r omglol-publish.zip main.js manifest.json styles.css
+
+      - name: Create GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-
           gh release create "$tag" \
             --title="$tag" \
-            --draft \
-            main.js manifest.json styles.css
+            --latest \
+            main.js manifest.json styles.css omglol-publish.zip
