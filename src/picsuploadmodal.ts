@@ -106,7 +106,8 @@ export class PicUploadModal extends Modal {
                 await this.uploader.uploadFile(
                   this.file,
                   this.description,
-                  this.hidden
+                  this.hidden,
+                  this.altText
                 );
               } else if (this.picId) {
                 // Edit mode

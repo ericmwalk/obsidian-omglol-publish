@@ -126,7 +126,8 @@ export class PicsUploader {
   public async uploadFile(
     file: TFile,
     description: string = "",
-    hidden?: boolean
+    hidden?: boolean,
+    altText?: string,
   ): Promise<string> {
     const arrayBuffer = await this.app.vault.readBinary(file);
     const base64 = this.arrayBufferToBase64(arrayBuffer);
@@ -155,11 +156,15 @@ export class PicsUploader {
     if (!picId || !uploadedUrl) throw new Error("No ID/URL returned from API");
 
     // Step 2: PUT metadata
-    const altText = await this.generateAltText(uploadedUrl, file.basename);
-
+    let finalAltText = altText;
+      if (!finalAltText) {
+        // Only auto-generate if not provided
+        finalAltText = await this.generateAltText(uploadedUrl, file.basename);
+      }
+    
     const body: any = {
       description,
-      alt_text: altText,
+      alt_text: finalAltText,
       tags: this.settings.defaultPicsTags || "",
     };
 
