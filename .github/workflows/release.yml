@@ -19,20 +19,20 @@ jobs:
         with:
           node-version: "18.x"
 
-      - name: Install and build
+      - name: Install and build dependencies
         run: |
           npm ci
-          npm run build
 
-      - name: Validate tag matches manifest version
+      - name: Update manifest.json version from tag
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          version=$(jq -r .version manifest.json)
-          if [ "$tag" != "v$version" ]; then
-            echo "❌ Tag ($tag) doesn't match manifest.json version ($version)"
-            exit 1
-          fi
-          echo "✅ Tag matches manifest version: $version"
+          version="${tag#v}"
+          echo "Setting manifest.json version to $version"
+          jq --arg ver "$version" '.version=$ver' manifest.json > tmp.$$.json && mv tmp.$$.json manifest.json
+          cat manifest.json
+
+      - name: Build plugin
+        run: npm run build
 
       - name: Update versions.json
         run: |
@@ -44,12 +44,12 @@ jobs:
           jq --arg v "v$version" --arg ver "$version" '.[$v]=$ver' versions.json > tmp.$$.json && mv tmp.$$.json versions.json
           cat versions.json
 
-      - name: Commit updated versions.json
+      - name: Commit version updates
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add versions.json
-          git commit -m "Update versions.json for $version" || echo "No changes to commit"
+          git add manifest.json versions.json
+          git commit -m "Bump version to $version" || echo "No changes to commit"
           git push
 
       - name: Zip plugin
