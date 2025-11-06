@@ -18,7 +18,7 @@ export class PicsUploader {
     this.plugin = plugin;
   }
 
-  // === Upload just the embed on the current line ===
+  // === Upload just the embed (local or remote) on the current line ===
   async uploadSelectedImage() {
     const editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
     if (!editor) {
@@ -28,15 +28,41 @@ export class PicsUploader {
 
     const cursor = editor.getCursor();
     const line = editor.getLine(cursor.line);
-    const match = line.match(/!\[\[(.*?)\]\]/);
 
-    if (!match) {
-      new Notice("No image embed found on this line.");
+    // Case 1: Obsidian-style embed
+    const embedMatch = line.match(/!\[\[(.*?)\]\]/);
+
+    // Case 2: Markdown-style remote image
+    const remoteMatch = line.match(/!\[.*?\]\((https?:\/\/[^\s)]+\.(?:jpg|jpeg|png|gif|webp))\)/i);
+
+    // 🟣 No match at all
+    if (!embedMatch && !remoteMatch) {
+      new Notice("No image embed or remote image found on this line.");
       return;
     }
 
-    await this.uploadAndReplace(editor, match[0], match[1]);
+    // 🟢 Remote image URL (Bunny, CDN, etc.)
+    if (remoteMatch) {
+      const remoteUrl = remoteMatch[1];
+      new Notice("Uploading remote image to some.pics...");
+      try {
+        const uploadedUrl = await this.uploadFile(remoteUrl);
+        const altText = await this.generateAltText(uploadedUrl, remoteUrl.split("/").pop() || "image");
+        const replacement = `![${altText}](${uploadedUrl})`;
+        editor.setLine(cursor.line, line.replace(remoteMatch[0], replacement));
+        new Notice("✅ Uploaded remote image to some.pics!");
+      } catch (err) {
+        console.error("Upload failed:", err);
+        new Notice("❌ Upload failed. See console for details.");
+      }
+      return;
+    }
+
+    // 🟣 Local embed (existing behavior)
+    const filename = embedMatch![1];
+    await this.uploadAndReplace(editor, embedMatch![0], filename);
   }
+
 
   // === Upload all embeds in the current note (replace all after uploads) ===
   async uploadAllEmbedsInNote() {
@@ -123,77 +149,146 @@ export class PicsUploader {
   }
 
   // === Core upload logic ===
-  public async uploadFile(
-    file: TFile,
-    description: string = "",
-    hidden?: boolean,
-    altText?: string,
-  ): Promise<string> {
-    const arrayBuffer = await this.app.vault.readBinary(file);
-    const base64 = this.arrayBufferToBase64(arrayBuffer);
+    public async uploadFile(
+      fileOrUrl: TFile | string,
+      description: string = "",
+      hidden?: boolean,
+      altText?: string,
+      tags?: string
+    ): Promise<string> {
+      try {
+        let uploadedUrl = "";
+        let picId = "";
+        let filename = "";
 
-    // Step 1: POST image
-    const postResp = await requestUrl({
-      url: `https://api.omg.lol/address/${this.settings.username}/pics/upload`,
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${this.settings.token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        pic: base64,
-        tags: this.settings.defaultPicsTags || "",
-      }),
-    });
+        // === CASE 1: Remote URL upload (e.g. Bunny CDN image) ===
+        if (typeof fileOrUrl === "string" && fileOrUrl.startsWith("http")) {
+          filename = fileOrUrl.split("/").pop() || "remote-image.jpg";
+          console.log("🌐 Uploading remote image URL to some.pics:", fileOrUrl);
 
-    if (postResp.status !== 200) {
-      console.error("Upload failed response:", postResp);
-      throw new Error(`Upload failed, status ${postResp.status}`);
-    }
+          // Step 1: Download the remote image
+          const remoteResp = await requestUrl({ url: fileOrUrl, method: "GET" });
+          const arrayBuffer = remoteResp.arrayBuffer;
+          if (!arrayBuffer) throw new Error("Failed to download remote image.");
 
-    const picId = postResp.json?.response?.id;
-    const uploadedUrl = postResp.json?.response?.url;
-    if (!picId || !uploadedUrl) throw new Error("No ID/URL returned from API");
+          // Step 2: Convert to Base64
+          const base64 = this.arrayBufferToBase64(arrayBuffer);
 
-    // Step 2: PUT metadata
-    let finalAltText = altText;
-      if (!finalAltText) {
-        // Only auto-generate if not provided
-        finalAltText = await this.generateAltText(uploadedUrl, file.basename);
+          // Step 3: Upload to some.pics via the normal endpoint
+          const postResp = await requestUrl({
+            url: `https://api.omg.lol/address/${this.settings.username}/pics/upload`,
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${this.settings.token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              pic: base64,
+              tags: this.settings.defaultPicsTags || "",
+            }),
+          });
+
+          if (postResp.status !== 200) {
+            console.error("Upload failed response:", postResp);
+            throw new Error(`Upload failed, status ${postResp.status}`);
+          }
+
+          picId = postResp.json?.response?.id;
+          uploadedUrl = postResp.json?.response?.url;
+          if (!picId || !uploadedUrl) throw new Error("No ID/URL returned from API");
+        }
+
+        // === CASE 2: Local file upload (existing behavior) ===
+        else if (fileOrUrl instanceof TFile) {
+          const file = fileOrUrl;
+          filename = file.basename;
+          const arrayBuffer = await this.app.vault.readBinary(file);
+          const base64 = this.arrayBufferToBase64(arrayBuffer);
+
+          const postResp = await requestUrl({
+            url: `https://api.omg.lol/address/${this.settings.username}/pics/upload`,
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${this.settings.token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              pic: base64,
+              tags: this.settings.defaultPicsTags || "",
+            }),
+          });
+
+          if (postResp.status !== 200) {
+            console.error("Upload failed response:", postResp);
+            throw new Error(`Upload failed, status ${postResp.status}`);
+          }
+
+          picId = postResp.json?.response?.id;
+          uploadedUrl = postResp.json?.response?.url;
+          if (!picId || !uploadedUrl) throw new Error("No ID/URL returned from API");
+        } else {
+          throw new Error("Invalid input type for uploadFile");
+        }
+
+        // === Step 2: Add metadata (same for both cases) ===
+        let finalAltText = altText;
+        if (!finalAltText) {
+          finalAltText = await this.generateAltText(uploadedUrl, filename);
+        }
+
+        // Combine modal-entered tags with defaults if both exist
+        const combinedTags =
+          tags && this.settings.defaultPicsTags
+            ? `${this.settings.defaultPicsTags}, ${tags}`
+            : tags || this.settings.defaultPicsTags || "";
+
+        const body: any = {
+          description,
+          alt_text: finalAltText,
+          tags: combinedTags,
+        };
+
+
+
+        if (hidden === undefined || hidden === true) {
+          body.hide_from_public = true;
+        }
+
+
+        const putResp = await requestUrl({
+          url: `https://api.omg.lol/address/${this.settings.username}/pics/${picId}`,
+          method: "PUT",
+          headers: {
+            "Authorization": `Bearer ${this.settings.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (putResp.status !== 200) {
+          console.warn("Metadata update failed:", putResp);
+        }
+
+        // === Log all uploads (local or remote) ===
+        if (fileOrUrl instanceof TFile) {
+          await this.logUpload(filename, uploadedUrl, fileOrUrl);
+        } else {
+          await this.logUpload(filename, uploadedUrl);
+        }
+
+        return uploadedUrl;
+      } catch (err: any) {
+        console.error("❌ Upload failed:", err);
+        new Notice(`Upload failed: ${err.message}`);
+        throw err;
       }
-    
-    const body: any = {
-      description,
-      alt_text: finalAltText,
-      tags: this.settings.defaultPicsTags || "",
-    };
-
-    if (hidden === undefined || hidden === true) {
-      body.hide_from_public = true;
     }
 
-    const putResp = await requestUrl({
-      url: `https://api.omg.lol/address/${this.settings.username}/pics/${picId}`,
-      method: "PUT",
-      headers: {
-        "Authorization": `Bearer ${this.settings.token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
 
-    if (putResp.status !== 200) {
-      console.warn("Metadata update failed:", putResp);
-    }
 
-    // Always log
-    await this.logUpload(file.basename, uploadedUrl, file);
-
-    return uploadedUrl;
-  }
 
   // === Alt text generator (GPT integration) ===
-  private async generateAltText(imageUrl: string, fallback: string): Promise<string> {
+  public async generateAltText(imageUrl: string, fallback: string): Promise<string> {
     if (!this.settings.chatgptApiKey) {
       return fallback;
     }
@@ -337,10 +432,6 @@ export class PicsUploader {
   }
 
 
-
-
-
-
   // === ArrayBuffer → Base64 ===
   private arrayBufferToBase64(buffer: ArrayBuffer): string {
     let binary = "";
@@ -352,15 +443,23 @@ export class PicsUploader {
     return btoa(binary);
   }
 
-  public resolveImageFromContext(): TFile | null {
+  public resolveImageFromContext(): TFile | string | null {
     const editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
     if (editor) {
       const cursor = editor.getCursor();
       const line = editor.getLine(cursor.line);
-      const match = line.match(/!\[\[(.*?)\]\]/);
-      if (match) {
-        const file = this.app.metadataCache.getFirstLinkpathDest(match[1], "");
+
+      // Case 1: Obsidian-style embed
+      const embedMatch = line.match(/!\[\[(.*?)\]\]/);
+      if (embedMatch) {
+        const file = this.app.metadataCache.getFirstLinkpathDest(embedMatch[1], "");
         if (file instanceof TFile) return file;
+      }
+
+      // Case 2: Markdown remote image
+      const remoteMatch = line.match(/!\[.*?\]\((https?:\/\/[^\s)]+\.(?:jpg|jpeg|png|gif|webp))\)/i);
+      if (remoteMatch) {
+        return remoteMatch[1]; // return the URL directly
       }
     }
 
@@ -368,8 +467,10 @@ export class PicsUploader {
     if (activeFile && activeFile.extension.match(/(png|jpg|jpeg|gif|webp)$/i)) {
       return activeFile;
     }
+
     return null;
   }
+
 
   // === Update metadata (edit mode) ===
   public async updateMetadata(

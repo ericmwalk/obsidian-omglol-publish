@@ -1,6 +1,6 @@
 // ======= Initialization and Processing ======= 
 
-import { App, Plugin, Notice, MarkdownView } from "obsidian";
+import { App, Plugin, Notice, MarkdownView, TFile } from "obsidian";
 import { getDailyNote, createDailyNote, getAllDailyNotes } from "obsidian-daily-notes-interface";
 import { CombinedSettings, DEFAULT_SETTINGS } from "./types";
 import { SettingsTab } from "./settingstab";
@@ -57,14 +57,30 @@ export default class OmglolPublish extends Plugin {
         callback: () => this.picsUploader?.uploadAllEmbedsInNote(),
       });
       
-      this.addRibbonIcon("image-plus", "Upload photo to some.pics", () => {
+      this.addRibbonIcon("image-plus", "Upload photo to some.pics", async () => {
         const file = this.picsUploader?.resolveImageFromContext();
-        if (file) {
-          new PicUploadModal(this.app, this.picsUploader!, file).open();
-        } else {
+
+        if (!file) {
           new Notice("Select an image file or place cursor on an image embed in a note.");
+          return;
         }
-      });
+
+        // Handle remote image URLs directly
+          if (typeof file === "string") {
+            // 🟣 Remote image (Bunny, CDN, etc.)
+            new PicUploadModal(this.app, this.picsUploader!, null, undefined, { remoteUrl: file }).open();
+            return;
+          }
+
+
+        // 🟣 Handle local file uploads (open the modal)
+          if (file instanceof TFile) {
+            new PicUploadModal(this.app, this.picsUploader!, file).open();
+          } else {
+            new Notice("Unsupported selection.");
+          }
+        });
+
 
       this.addCommand({
         id: "upload-pic",
@@ -73,7 +89,7 @@ export default class OmglolPublish extends Plugin {
           const file = this.picsUploader?.resolveImageFromContext();
           if (file) {
             if (!checking) {
-              new PicUploadModal(this.app, this.picsUploader!, file).open();
+              new PicUploadModal(this.app, this.picsUploader!, (typeof file === "string" ? null : file)).open();
             }
             return true;
           }

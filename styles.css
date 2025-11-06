@@ -8,3 +8,18 @@
   color: var(--text-normal);
   resize: vertical;
 }
+
+/* === some.pics modal mobile scroll fix === */
+.modal.mod-prompt .modal-content,
+.modal .modal-content {
+  max-height: 80vh;        /* don’t exceed 80% of viewport height */
+  overflow-y: auto;         /* enable vertical scrolling */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch; /* smooth iOS scroll */
+  padding-bottom: 1rem;     /* make sure buttons aren’t clipped */
+}
+
+/* Optional: improve spacing of settings for readability */
+.modal .setting-item {
+  margin-bottom: 0.75rem;
+}
