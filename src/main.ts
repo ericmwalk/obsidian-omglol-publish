@@ -43,6 +43,17 @@ export default class OmglolPublish extends Plugin {
       });
     }
 
+    // === this is for batch uploading to weblog ===
+    this.addCommand({
+      id: "batch-publish-weblog",
+      name: "Batch Publish to Weblog",
+      callback: async () => {
+      const publisher = new WeblogPublisher(this.app, this.settings, this);
+        await publisher.batchPublish();
+      },
+    });
+
+
     // === some.pics ===
     if (this.settings.enablePics) {
       this.picsUploader = new PicsUploader(this.app, this.settings, this);

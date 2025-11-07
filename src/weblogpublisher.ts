@@ -1,4 +1,4 @@
-import { App, MarkdownView, Notice, Plugin, TFile, requestUrl, normalizePath } from "obsidian";
+import { App, MarkdownView, Notice, Plugin, TFile, TFolder, requestUrl, normalizePath, FuzzySuggestModal } from "obsidian";
 import { CombinedSettings } from "./types";
 import { WeblogFrontmatterModal, WeblogFrontmatterValues } from "./weblogfrontmattermodal";
 
@@ -126,6 +126,170 @@ export class WeblogPublisher {
       new Notice("❌ Failed to publish weblog post.");
     }
   }
+
+  // Publishes a single file (used by batchPublish)
+    public async publishFile(file: TFile) {
+      const content = await this.app.vault.read(file);
+      const metadata = this.app.metadataCache.getCache(file.path)?.frontmatter;
+
+      if (!metadata || metadata.status?.toLowerCase() !== "published") return;
+
+      const slug = metadata.slug?.trim() ||
+        this.getEffectiveSlug(metadata.title, content, file.name);
+      const date = metadata.date?.trim() || new Date().toISOString();
+      const entryId = metadata.entry;
+
+      const tagsArray = metadata.tags ?? [];
+      const tagsLine = Array.isArray(tagsArray) && tagsArray.length > 0
+        ? `Tags: ${tagsArray.join(", ")}\n`
+        : "";
+
+      const type = metadata.type?.trim();
+      const validTypeLine = type && type.toLowerCase() !== "post"
+        ? `Type: ${type}\n`
+        : "";
+      const apiStatus = metadata.status?.trim();
+      const statusLine = apiStatus ? `Status: ${apiStatus}\n` : "";
+
+      const bodyContent = this.stripFrontmatter(content);
+      const titleLine = metadata.title?.trim()
+        ? `Title: ${metadata.title.trim()}\n`
+        : "";
+
+      const fullPost = `${titleLine}Slug: ${slug}\nDate: ${date}\n${validTypeLine}${statusLine}${tagsLine}\n${bodyContent}`;
+      const endpoint = entryId
+        ? `https://api.omg.lol/address/${this.settings.username}/weblog/entry/${entryId}`
+        : `https://api.omg.lol/address/${this.settings.username}/weblog/entry`;
+
+      try {
+        const response = await requestUrl({
+          method: "POST",
+          url: endpoint,
+          headers: {
+            Authorization: `Bearer ${this.settings.apiToken || this.settings.token}`,
+            "Content-Type": "text/plain",
+          },
+          body: fullPost,
+        });
+
+        const result = response.json;
+        const entry = result?.response?.entry;
+        if (entry) {
+          await this.injectOrUpdateFrontmatter(file, entry.entry, entry.slug || slug);
+          new Notice(entryId ? `🔁 Updated: ${file.name}` : `✅ Published: ${file.name}`);
+        } else {
+          throw new Error("Response missing entry data.");
+        }
+      } catch (error) {
+        console.error("Error publishing:", error);
+        new Notice(`❌ Failed to publish ${file.name}`);
+      }
+    }
+  
+    public async batchPublish() {
+      // Get list of folders
+      const folders = this.app.vault
+        .getAllLoadedFiles()
+        .filter((f): f is TFolder => f instanceof TFolder)
+        .map((f) => f.path)
+        .filter((p) => !p.startsWith(".")); // skip hidden folders
+
+      if (folders.length === 0) {
+        new Notice("No folders found in vault.");
+        return;
+      }
+
+    // Select a folder to publish
+    const selectedFolder = await new Promise<string | null>((resolve) => {
+      const self = this;
+
+      class FolderSelectModal extends FuzzySuggestModal<string> {
+        folders: string[];
+
+        constructor(app: App, folders: string[]) {
+          super(app);
+          this.folders = folders;
+        }
+
+        getItems(): string[] {
+          return this.folders;
+        }
+
+        getItemText(item: string): string {
+          return item;
+        }
+
+        onChooseItem(item: string, evt: MouseEvent | KeyboardEvent): void {
+          // Resolve immediately when item chosen
+          resolve(item);
+          // Close the modal cleanly after resolving
+          this.close();
+        }
+
+        onClose(): void {
+          // Only resolve null if user closed manually (no selection)
+          setTimeout(() => resolve(null), 10);
+        }
+      }
+
+      const modal = new FolderSelectModal(self.app, folders);
+      modal.setPlaceholder("Select folder to batch publish");
+      modal.open();
+    });
+
+
+      // exit if canceled
+      if (!selectedFolder) {
+        new Notice("Batch publish canceled — no folder selected.");
+        return;
+      }
+
+      // Get the chosen folder object
+      const folder = this.app.vault.getAbstractFileByPath(selectedFolder);
+      if (!(folder instanceof TFolder)) {
+        new Notice(`⚠️ Folder "${selectedFolder}" not found.`);
+        return;
+      }
+
+      // Recursive helper to walk through subfolders
+      const collectMarkdownFiles = (dir: TFolder): TFile[] => {
+        let files: TFile[] = [];
+        for (const child of dir.children) {
+          if (child instanceof TFile && child.extension === "md") files.push(child);
+          else if (child instanceof TFolder) files = files.concat(collectMarkdownFiles(child));
+        }
+        return files;
+      };
+
+      const markdownFiles = collectMarkdownFiles(folder);
+
+      if (markdownFiles.length === 0) {
+        new Notice(`No Markdown files found in "${selectedFolder}".`);
+        return;
+      }
+
+      new Notice(`Starting batch publish (${markdownFiles.length} files)…`);
+      let publishedCount = 0;
+
+      for (const file of markdownFiles) {
+        try {
+          const metadata = this.app.metadataCache.getCache(file.path)?.frontmatter;
+          if (metadata?.status?.toLowerCase() === "published") {
+            await this.publishFile(file);
+            publishedCount++;
+          }
+        } catch (err) {
+          console.error(`❌ Error publishing ${file.name}:`, err);
+          new Notice(`❌ Failed: ${file.name}`);
+        }
+      }
+
+      new Notice(`✅ Batch publish complete. ${publishedCount} posts processed.`);
+    }
+
+
+
+
 
   private getEffectiveSlug(title: string, content: string, fallbackFilename: string): string {
     const useTitle = title?.trim();
