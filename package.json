@@ -1,7 +1,7 @@
 {
 	"name": "omglol-publish",
-	"version": "2.5.0",
-	"description": "Plugin to work with OMG.lol statuslog, weblog and some.pics",
+	"version": "2.5.2",
+	"description": "Allows you to post to weblogs.lol, status.lol, some.pics and paste.lol from Obsidian.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
