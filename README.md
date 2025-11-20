@@ -1,4 +1,4 @@
-# OMG.lol Publish Plugin for Obsidian
+# OMG.lol Publisher Plugin for Obsidian
 
 This plugin has changed it's name from Status.lol Plugin to just Omg.lol Publish as you can make post to [weblog.lol](https://weblog.lol) as well as continue to post status updates to [status.lol](https://status.lol). Finally, you can use some.pics to post pictures for all your web needs.
 
