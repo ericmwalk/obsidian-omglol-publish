@@ -12,14 +12,72 @@
 /* === some.pics modal mobile scroll fix === */
 .modal.mod-prompt .modal-content,
 .modal .modal-content {
-  max-height: 80vh;        /* don’t exceed 80% of viewport height */
-  overflow-y: auto;         /* enable vertical scrolling */
+  max-height: 80vh;       
+  overflow-y: auto;         
   overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch; /* smooth iOS scroll */
-  padding-bottom: 1rem;     /* make sure buttons aren’t clipped */
+  -webkit-overflow-scrolling: touch; 
+  padding-bottom: 1rem;     
 }
+
+/* === some.pics text areas === */
+.somepics-textarea {
+  width: 100%;
+  padding: 0.5em;
+  font-size: 1em;
+  line-height: 1.4;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+  resize: vertical;
+}
+
+/* Primary field */
+.somepics-description {
+  min-height: 5em;
+}
+
+/* Alt text field */
+.alt-text-field {
+  min-height: 3.25em;
+  font-size: 0.95em;
+}
+
+.modal.mod-prompt .modal-content,
+.modal .modal-content {
+  max-height: 80vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 1rem;
+}
+
+/* Extra bottom padding for mobile keyboards */
+@media (max-width: 600px) {
+  .modal.mod-prompt .modal-content,
+  .modal .modal-content {
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+  }
+}
+
+
+.somepics-fullwidth-input {
+  width: 100%;
+  padding: 0.5em;
+  font-size: 1em;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+}
+
 
 /* Optional: improve spacing of settings for readability */
 .modal .setting-item {
   margin-bottom: 0.75rem;
+}
+
+.omg-confirm-modal .modal-button-container {
+  display: flex;
+  gap: 0.5rem;
 }

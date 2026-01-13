@@ -1,57 +1,56 @@
-import { App, Modal, Setting, Notice } from "obsidian";
+import { App, Modal, Setting, TextComponent, ToggleComponent } from "obsidian";
 
 export class PasteModal extends Modal {
-  private onSubmit: (result: { title: string; listed: boolean }) => void;
-  private defaultTitle: string;
-  private titleValue: string;
-  private listedValue: boolean;
+  private titleInput!: TextComponent;
+  private listedToggle!: ToggleComponent;
 
   constructor(
     app: App,
     defaultTitle: string,
-    onSubmit: (result: { title: string; listed: boolean }) => void
+    private onSubmit: (result: { title: string; listed: boolean }) => Promise<void>
   ) {
     super(app);
-    this.onSubmit = onSubmit;
     this.defaultTitle = defaultTitle;
-    this.titleValue = defaultTitle;
-    this.listedValue = false; // default to unlisted
   }
+
+  private defaultTitle: string;
 
   onOpen() {
     const { contentEl } = this;
 
-    contentEl.empty();
-    contentEl.createEl("h2", { text: "Publish to Pastebin" });
+    contentEl.createEl("h2", { text: "Publish to paste.lol" });
 
     new Setting(contentEl)
-      .setName("Paste slug")
-      .addText((text) =>
-        text.setValue(this.defaultTitle).onChange((val) => {
-          this.titleValue = val.trim();
-        })
-      );
-
-    new Setting(contentEl).setName("Listed").addToggle((toggle) => {
-      toggle.setValue(this.listedValue).onChange((val) => {
-        this.listedValue = val;
+      .setName("Paste name")
+      .setDesc("You may include an extension (e.g. example.js, readme.md)")
+      .addText((text) => {
+        this.titleInput = text;
+        text.setValue(this.defaultTitle);
       });
-    });
 
-    const buttons = contentEl.createDiv("modal-button-container");
+    new Setting(contentEl)
+      .setName("Listed")
+      .setDesc("Whether this paste should be publicly listed")
+      .addToggle((toggle) => {
+        this.listedToggle = toggle;
+        toggle.setValue(false);
+      });
 
-    const submitBtn = buttons.createEl("button", { text: "Publish" });
-    submitBtn.onclick = () => {
-      if (!this.titleValue) {
-        new Notice("Please enter a title/slug before publishing.");
-        return;
-      }
-      this.onSubmit({ title: this.titleValue, listed: this.listedValue });
-      this.close();
-    };
+    new Setting(contentEl).addButton((btn) =>
+      btn
+        .setButtonText("Publish")
+        .setCta()
+        .onClick(async () => {
+          const title = this.titleInput.getValue().trim();
+          if (!title) return;
 
-    const cancelBtn = buttons.createEl("button", { text: "Cancel" });
-    cancelBtn.onclick = () => this.close();
+          this.close();
+          await this.onSubmit({
+            title,
+            listed: this.listedToggle.getValue(),
+          });
+        })
+    );
   }
 
   onClose() {

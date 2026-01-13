@@ -1,4 +1,4 @@
-import { App, MarkdownView, Notice, Plugin, TFile, TFolder, requestUrl, normalizePath, FuzzySuggestModal } from "obsidian";
+import { App, MarkdownView, Notice, Plugin, TFile, TFolder, requestUrl, normalizePath, FuzzySuggestModal, Modal, ButtonComponent } from "obsidian";
 import { CombinedSettings } from "./types";
 import { WeblogFrontmatterModal, WeblogFrontmatterValues } from "./weblogfrontmattermodal";
 
@@ -19,6 +19,12 @@ export class WeblogPublisher {
       name: "Publish to Weblog",
       callback: () => this.publishCurrentNote(),
     });
+    this.plugin.addCommand({
+      id: "delete-weblog-post",
+      name: "Delete Weblog Post/Page",
+      callback: () => this.deleteCurrentPost(),
+    });
+
   }
 
   public async publishCurrentNote() {
@@ -55,6 +61,8 @@ export class WeblogPublisher {
       new Notice("Note frontmatter must include `status: published` or `draft`.");
       return;
     }
+    
+    const wasUpdate = Boolean(metadata.entry);
 
     const frontmatterTitle = metadata.title?.trim() ?? "";
     const useTitle = frontmatterTitle.length > 0 ? frontmatterTitle : "";
@@ -105,7 +113,7 @@ export class WeblogPublisher {
         const returnedSlug = entry.slug || slug;
         await this.injectOrUpdateFrontmatter(file, entry.entry, returnedSlug);
 
-        // NEW: Respect page-type + renamePages toggle
+        // Respect page-type + renamePages toggle
         const isPage =
           typeof metadata.type === "string" &&
           metadata.type.toLowerCase() === "page";
@@ -116,8 +124,24 @@ export class WeblogPublisher {
         if (allowRename) {
           await this.renameFileWithSlug(file, safeDate, returnedSlug);
         }
+// THIS SHOULD BE CHANGED
+//        new Notice(entryId ? "🔁 Weblog post updated." : "✅ Weblog post published.");
+        const isDraft = status === "draft";
 
-        new Notice(entryId ? "🔁 Weblog post updated." : "✅ Weblog post published.");
+        let message = "";
+
+        if (isDraft) {
+          message = wasUpdate
+            ? "📝 Weblog draft updated."
+            : "📝 Draft saved to weblog (not public).";
+        } else {
+          message = wasUpdate
+            ? "🔁 Weblog post updated."
+            : "✅ Weblog post published.";
+        }
+
+        new Notice(message);
+
       } else {
         throw new Error("Response missing 'entry' data.");
       }
@@ -134,10 +158,14 @@ export class WeblogPublisher {
 
       if (!metadata || metadata.status?.toLowerCase() !== "published") return;
 
+
       const slug = metadata.slug?.trim() ||
         this.getEffectiveSlug(metadata.title, content, file.name);
       const date = metadata.date?.trim() || new Date().toISOString();
       const entryId = metadata.entry;
+
+      const wasUpdate = Boolean(metadata.entry);
+      const status = metadata.status?.toLowerCase();
 
       const tagsArray = metadata.tags ?? [];
       const tagsLine = Array.isArray(tagsArray) && tagsArray.length > 0
@@ -175,8 +203,11 @@ export class WeblogPublisher {
         const result = response.json;
         const entry = result?.response?.entry;
         if (entry) {
-          await this.injectOrUpdateFrontmatter(file, entry.entry, entry.slug || slug);
-          new Notice(entryId ? `🔁 Updated: ${file.name}` : `✅ Published: ${file.name}`);
+          const returnedSlug = entry.slug || slug;
+          await this.injectOrUpdateFrontmatter(file, entry.entry, returnedSlug);
+
+          new Notice(entryId ? "🔁 Weblog post updated." : "✅ Weblog post published.");
+
         } else {
           throw new Error("Response missing entry data.");
         }
@@ -288,9 +319,6 @@ export class WeblogPublisher {
     }
 
 
-
-
-
   private getEffectiveSlug(title: string, content: string, fallbackFilename: string): string {
     const useTitle = title?.trim();
     let source: string;
@@ -384,11 +412,12 @@ export class WeblogPublisher {
   }
 
   private promptForFrontmatter(file: TFile, content: string, metadata?: any) {
-    const existing: Partial<WeblogFrontmatterValues> = {
+    const existing: Partial<WeblogFrontmatterValues & { type?: string }> = {
       title: metadata?.title,
       date: metadata?.date,
       tags: Array.isArray(metadata?.tags) ? metadata.tags : [],
       status: metadata?.status,
+      type: metadata?.type,
     };
 
     new WeblogFrontmatterModal(this.app, async (values) => {
@@ -397,6 +426,7 @@ export class WeblogPublisher {
         values.title ? `title: ${values.title}` : "",
         `date: ${values.date}`,
         `status: ${values.status}`,
+        values.isPage ? "type: page" : "",
         values.tags.length
           ? `tags:\n${values.tags.map(t => `  - ${t}`).join("\n")}`
           : "",
@@ -411,5 +441,133 @@ export class WeblogPublisher {
       }, 300);
     }, existing).open();
   }
+
+
+  // ===== Delete Logic =====
+  private async deleteCurrentPost() {
+    if (!this.settings.enableWeblog) {
+      new Notice("Weblog publishing is disabled in settings.");
+      return;
+    }
+
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!view || !view.file) {
+      new Notice("No active markdown file.");
+      return;
+    }
+
+    const file = view.file;
+    const metadata = this.app.metadataCache.getCache(file.path)?.frontmatter;
+
+    if (!metadata || !metadata.entry) {
+      new Notice("This post has not been published yet.");
+      return;
+    }
+
+    const entry = metadata.entry;
+    const title = metadata.title ?? file.basename;
+
+    const confirmed = await this.confirmDelete(
+      `This will permanently delete the weblog post/page "${title}".`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const response = await requestUrl({
+        method: "DELETE",
+        url: `https://api.omg.lol/address/${this.settings.username}/weblog/delete/${entry}`,
+        headers: {
+          Authorization: `Bearer ${this.settings.apiToken || this.settings.token}`,
+        },
+      });
+
+      if (!response.json?.request?.success) {
+        throw new Error(
+          response.json?.response?.message || "Delete failed"
+        );
+      }
+
+      // clean up entry information and make a draft
+      await this.detachWeblogEntry(file);
+
+      new Notice("🗑️ Weblog post/page deleted.");
+    } catch (error) {
+      console.error("Error deleting weblog post:", error);
+      new Notice("❌ Failed to delete weblog post.");
+    }
+  }
+
+  private async detachWeblogEntry(file: TFile) {
+    const content = await this.app.vault.read(file);
+
+    const updated = content.replace(
+      /^---([\s\S]*?)---/,
+      (_, yamlBlock) => {
+        const lines = yamlBlock.trim().split("\n");
+
+        const cleaned: string[] = [];
+        let hasStatus = false;
+
+        for (const line of lines) {
+          if (line.startsWith("entry:")) continue;
+
+          if (line.startsWith("status:")) {
+            cleaned.push("status: draft");
+            hasStatus = true;
+            continue;
+          }
+
+          cleaned.push(line);
+        }
+
+        // If status was missing entirely, add it
+        if (!hasStatus) {
+          cleaned.push("status: draft");
+        }
+
+        return `---\n${cleaned.join("\n")}\n---`;
+      }
+    );
+
+    await this.app.vault.modify(file, updated);
+  }
+
+
+private async confirmDelete(message: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const modal = new Modal(this.app);
+    modal.modalEl.addClass("omg-confirm-modal");
+
+    modal.titleEl.setText("Confirm Delete");
+
+    modal.contentEl.createEl("p", { text: message });
+    modal.contentEl.createEl("p", {
+      text: "This action has no undo. Continue?",
+    });
+
+    const buttonRow = modal.contentEl.createDiv({
+      cls: "modal-button-container",
+    });
+
+    new ButtonComponent(buttonRow)
+      .setButtonText("Cancel")
+      .onClick(() => {
+        modal.close();
+        resolve(false);
+      });
+
+    new ButtonComponent(buttonRow)
+      .setButtonText("Delete")
+      .setCta()
+      .onClick(() => {
+        modal.close();
+        resolve(true);
+      });
+
+    modal.open();
+  });
+}
+
 
 }

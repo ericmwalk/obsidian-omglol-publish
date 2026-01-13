@@ -14,11 +14,13 @@ This plugin has changed it's name from Status.lol Plugin to just Omg.lol Publish
 
 ## Features
 ### Weblog.lol
-- Publish blog posts to weblog.lol
-- Update prior published posts using the saved weblog entry id
-- Backdate time using the fontmatter time functionally
-- Tag posts usings fontmatter Tags
-- Publish Draft Posts
+- Publish new weblog posts directly from Obsidian
+- Update previously published posts using your saved entry ID
+- Support for backdating or futuredating via frontmatter date/time
+- Publish with tags (read from frontmatter)
+- Publish draft posts
+- Automatically rename note files after publishing (optional)
+- Supports slugs, metadata updates, and permalink extraction
 
 ### Status.lol
 - Post status updates to your status.lol address
@@ -34,7 +36,9 @@ This plugin has changed it's name from Status.lol Plugin to just Omg.lol Publish
 - Keep original pictures in obsidian after upload
 
 ### Paste.lol
-- 
+- Quickly create Paste.lol pastes from selected text
+- Automatically copy the resulting URL back into your note
+- Use pastes as lightweight embeds, snippets, or shareable reference blocks
 
 
 ## Setup

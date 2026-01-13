@@ -5,6 +5,7 @@ export interface WeblogFrontmatterValues {
   date: string;
   tags: string[];
   status: "published" | "draft";
+  isPage?: boolean;
 }
 
 export class WeblogFrontmatterModal extends Modal {
@@ -14,7 +15,7 @@ export class WeblogFrontmatterModal extends Modal {
   constructor(
     app: App,
     onSubmit: (values: WeblogFrontmatterValues) => void,
-    existing?: Partial<WeblogFrontmatterValues>
+    existing?: Partial<WeblogFrontmatterValues & { type?: string }>
   ) {
     super(app);
 
@@ -23,7 +24,9 @@ export class WeblogFrontmatterModal extends Modal {
       date: existing?.date ?? new Date().toISOString(),
       tags: existing?.tags ?? [],
       status: existing?.status ?? "published",
+      isPage: existing?.type === "page" ? true : false, // 👈 default logic
     };
+
     this.onSubmit = onSubmit;
   }
 
@@ -66,6 +69,18 @@ export class WeblogFrontmatterModal extends Modal {
         toggle.setValue(this.values.status === "published")
           .onChange((val) => {
             this.values.status = val ? "published" : "draft";
+          });
+      });
+
+    // Page toggle
+    new Setting(contentEl)
+      .setName("Page")
+      .setDesc("Treat this note as a page instead of a blog post")
+      .addToggle((toggle: ToggleComponent) => {
+        toggle
+          .setValue(this.values.isPage ?? false)
+          .onChange((val) => {
+            this.values.isPage = val;
           });
       });
 

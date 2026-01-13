@@ -12,7 +12,10 @@ function formatDateToISO(date: Date): string {
   return date.toISOString();
 }
 
-function stripFrontmatter(content: string): { frontmatter: Record<string, any>; body: string } {
+function stripFrontmatter(content: string): {
+  frontmatter: Record<string, any>;
+  body: string;
+} {
   const fmRegex = /^---\n([\s\S]*?)\n---\n?/;
   const match = content.match(fmRegex);
 
@@ -29,15 +32,39 @@ function stripFrontmatter(content: string): { frontmatter: Record<string, any>; 
   return { frontmatter: {}, body: content };
 }
 
-function slugifyTitle(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .substring(0, 32);
+
+// ======= only publish fenced content ======= 
+function extractFencedContent(body: string): {
+  content: string;
+  syntax: string;
+} {
+  const match = body.match(/```(\w+)?\n([\s\S]*?)```/m);
+
+  if (!match) {
+    throw new Error(
+      "Paste.lol requires content inside a ``` fenced code block."
+    );
+  }
+
+  return {
+    syntax: match[1] ?? "text",
+    content: match[2].trimEnd(),
+  };
 }
 
-export class PastebinPublisher {
+// ======= title normalization ======= 
+
+function normalizePasteTitle(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export class PasteBinPublisher {
   app: App;
   token: string;
   username: string;
@@ -48,18 +75,14 @@ export class PastebinPublisher {
     this.username = username;
   }
 
-  /**
-   * Entry point: publish note to paste.lol.
-   * Decides whether to reuse paste_id or open modal.
-   */
+  // ======= publish note to paste.lol =======
+  
   async publishCurrentNote(file: TFile) {
     const fm = await this.getFrontmatter(file);
 
-    if (fm?.paste_id && /^[a-z0-9_-]+$/.test(fm.paste_id)) {
-      // Already published with a good slug → update directly
+    if (fm?.paste_id) {
       await this.publishPaste(file, fm.listed ?? false, fm.paste_id);
     } else {
-      // Not published yet → open modal
       return new Promise<void>((resolve) => {
         new PasteModal(this.app, file.basename, async ({ title, listed }) => {
           await this.publishPaste(file, listed, title);
@@ -69,45 +92,42 @@ export class PastebinPublisher {
     }
   }
 
-  /**
-   * Core publish logic (create/update).
-   */
+// ======= create / update logic ======= 
+
   private async publishPaste(file: TFile, listed: boolean, title: string) {
     const raw = await this.app.vault.read(file);
     const { frontmatter, body } = stripFrontmatter(raw);
 
-    const pasteSlug = slugifyTitle(title);
+    // Normalize title (pastebin-style)
+    const rawTitle = title || file.basename;
+    const normalizedTitle = normalizePasteTitle(rawTitle);
+
+    // Fenced content only
+    const { content } = extractFencedContent(body);
 
     const prevId = frontmatter.paste_id as string | undefined;
     const prevListed = frontmatter.listed ?? false;
-    const listedChanged = prevId && prevListed !== listed;
+    const listedChanged = !!(prevId && prevListed !== listed);
 
-    // Build payload
     const payload: any = {
-      title: pasteSlug,
-      content: body.trim(),
+      title: normalizedTitle,
+      content,
     };
-    // Only send listed if explicitly true
+
     if (listed === true) {
       payload.listed = true;
     }
 
     try {
-      let newId = prevId;
-      let newUrl = frontmatter.paste_url;
-
       if (prevId && listedChanged) {
-        // Delete the old paste first
         await requestUrl({
           url: `https://api.omg.lol/address/${this.username}/pastebin/${prevId}`,
           method: "DELETE",
           headers: { Authorization: `Bearer ${this.token}` },
         });
-        newId = "";
       }
 
-      // Publish/update
-      const res = await requestUrl({
+      await requestUrl({
         url: `https://api.omg.lol/address/${this.username}/pastebin/`,
         method: "POST",
         headers: {
@@ -117,29 +137,33 @@ export class PastebinPublisher {
         body: JSON.stringify(payload),
       });
 
-      if (res.json?.response?.paste) {
-        newId = res.json.response.paste.id || pasteSlug;
-        newUrl = res.json.response.paste.url || `https://${this.username}.paste.lol/${pasteSlug}`;
-      } else {
-        newId = pasteSlug;
-        newUrl = `https://${this.username}.paste.lol/${pasteSlug}`;
-      }
+      const newUrl = `https://${this.username}.paste.lol/${normalizedTitle}`;
 
-      // Always update frontmatter
       await this.setFrontmatter(file, {
         ...frontmatter,
-        paste_id: newId,
+        paste_id: normalizedTitle,
         paste_url: newUrl,
         listed,
         date: formatDateToISO(new Date()),
       });
 
-      new Notice(listed ? "Paste published (listed)" : "Paste published (unlisted)");
+      new Notice(
+        prevId
+          ? "Paste updated (may take a moment to propagate)"
+          : listed
+          ? "Paste published (listed)"
+          : "Paste published (unlisted)"
+      );
     } catch (err: any) {
       console.error("Error publishing/updating paste:", err);
-      new Notice("Failed to publish or update paste: " + (err.message || "Unknown error"));
+      new Notice(
+        "Failed to publish or update paste: " +
+          (err.message || "Unknown error")
+      );
     }
   }
+
+// ======= delete logic ======= 
 
   async deletePaste(file: TFile) {
     const raw = await this.app.vault.read(file);
@@ -175,6 +199,8 @@ export class PastebinPublisher {
       new Notice("Failed to delete paste: " + (err.message || "Unknown error"));
     }
   }
+
+// ======= Frontmatter helpers ======= 
 
   async getFrontmatter(file: TFile): Promise<Record<string, any>> {
     const content = await this.app.vault.read(file);

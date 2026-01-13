@@ -7,9 +7,14 @@ import { SettingsTab } from "./settingstab";
 import { WeblogPublisher } from "./weblogpublisher";
 import { StatusPublisher } from "./statuspublisher";
 import { PicsUploader } from "./picsuploader";
-import { PastebinPublisher } from "./pastebinpublisher";
+import { PasteBinPublisher } from "./pastebinpublisher";
 import { PasteModal } from "./pastemodal";
 import { PicUploadModal } from "./picsuploadmodal";
+import { WeblogTemplatePublisher } from "./weblogtemplatepublisher";
+import { WeblogConfigurationPublisher } from "./weblogconfigurationpublisher";
+import { ProfileWebPublisher } from "./profilewebpublisher";
+import { StatusBioPublisher } from "./statusbiopublisher";
+import { NowPagePublisher } from "./nowpagepublisher";
 
 
 export default class OmglolPublish extends Plugin {
@@ -18,7 +23,7 @@ export default class OmglolPublish extends Plugin {
   statusPublisher: StatusPublisher | null = null;
   weblogPublisher: WeblogPublisher | null = null;
   picsUploader: PicsUploader | null = null;
-  pastebinPublisher: PastebinPublisher | null = null;
+  pastebinPublisher: PasteBinPublisher | null = null;
 
   async onload() {
     await this.loadSettings();
@@ -34,6 +39,11 @@ export default class OmglolPublish extends Plugin {
         this.statusPublisher?.showStatusModal();
       });
     }
+    // === Status.lol Bio ===
+    if (this.settings.enableStatusPoster) {
+      new StatusBioPublisher(this.app, this.settings, this);
+    }
+
 
     // === Weblog.lol ===
     if (this.settings.enableWeblog) {
@@ -52,6 +62,18 @@ export default class OmglolPublish extends Plugin {
         await publisher.batchPublish();
       },
     });
+    
+    // === Weblog Templates ===
+    if (this.settings.enableWeblog) {
+      new WeblogTemplatePublisher(this.app, this.settings, this);
+      new WeblogConfigurationPublisher(this.app, this.settings, this)
+    }
+
+    // === Profile/Web Page Publisher ===
+    new ProfileWebPublisher(this.app, this.settings, this);
+
+    // === Now Page Publisher ===
+    new NowPagePublisher(this.app, this.settings, this);
 
 
     // === some.pics ===
@@ -200,7 +222,7 @@ export default class OmglolPublish extends Plugin {
 
     // === paste.lol (Pastebin) ===
     if (this.settings.enablePastebin) {
-      this.pastebinPublisher = new PastebinPublisher(
+      this.pastebinPublisher = new PasteBinPublisher(
         this.app,
         this.settings.token,
         this.settings.username

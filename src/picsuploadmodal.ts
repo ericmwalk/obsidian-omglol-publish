@@ -82,31 +82,42 @@ export class PicUploadModal extends Modal {
     // === Prefilled fields ===
     new Setting(contentEl)
       .setName("Description")
-      .addText((text) =>
-        text.setValue(this.description).onChange((value) => {
-          this.description = value;
-        })
-      );
+      .addTextArea((text) => {
+        text
+          .setValue(this.description)
+          .onChange((value) => {
+            this.description = value;
+          });
+
+        text.inputEl.rows = 3;
+        text.inputEl.classList.add("somepics-textarea", "somepics-description");
+      });
 
     new Setting(contentEl)
       .setName("Tags")
       .setDesc("Comma separated")
-      .addText((text) =>
-        text.setValue(this.tags).onChange((value) => {
-          this.tags = value;
-        })
-      );
+      .addText((text) => {
+        text
+          .setValue(this.tags)
+          .onChange((value) => {
+            this.tags = value;
+          });
+
+        text.inputEl.classList.add("somepics-textarea");
+      });
 
     new Setting(contentEl)
       .setName("Alt Text")
-      .addText((text) =>
+      .addTextArea((text) => {
         text
           .setValue(this.altText)
           .onChange((value) => {
             this.altText = value;
-          })
-          .inputEl.classList.add("alt-text-field") 
-      );
+          });
+
+        text.inputEl.rows = 2;
+        text.inputEl.classList.add("somepics-textarea", "alt-text-field");
+      });
 
     new Setting(contentEl)
       .setName("Hide from public feed")
