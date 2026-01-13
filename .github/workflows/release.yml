@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # ensures full history so git push/pull work correctly
+          fetch-depth: 0
 
       - name: Use Node.js
         uses: actions/setup-node@v4
@@ -59,9 +59,14 @@ jobs:
             git push origin HEAD:main
           fi
 
+      - name: Prepare plugin folder
+        run: |
+          mkdir statuslol-post
+          cp main.js manifest.json styles.css statuslol-post/
+
       - name: Zip plugin
         run: |
-          zip -r omglol-publish.zip main.js manifest.json styles.css
+          zip -r statuslol-post.zip statuslol-post
 
       - name: Create GitHub release
         env:
@@ -71,4 +76,4 @@ jobs:
           gh release create "$tag" \
             --title="$tag" \
             --latest \
-            main.js manifest.json styles.css omglol-publish.zip
+            statuslol-post.zip
