@@ -28,7 +28,7 @@ jobs:
       - name: Update manifest.json version from tag
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          version="${tag#v}"
+          version="$tag"
           echo "Setting manifest.json version to $version"
           jq --arg ver "$version" '.version=$ver' manifest.json > tmp.$$.json && mv tmp.$$.json manifest.json
           cat manifest.json
