@@ -76,4 +76,7 @@ jobs:
           gh release create "$tag" \
             --title="$tag" \
             --latest \
-            statuslol-post.zip
+            statuslol-post.zip \
+            main.js \
+            manifest.json \
+            styles.css
