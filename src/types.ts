@@ -52,7 +52,7 @@ export const DEFAULT_SETTINGS: CombinedSettings = {
   skip_mastodon_post: true,
   default_emoji: "💬",
   saveToNote: true,
-  logNotePath: "",
+  logNotePath: "status-log",
   alsoLogToDaily: false,
   enableStatusPoster: true,
 

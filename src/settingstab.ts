@@ -1,5 +1,6 @@
-import { App, PluginSettingTab, Setting, setIcon } from "obsidian";
+import { App, PluginSettingTab, Setting, setIcon, FuzzySuggestModal, TFolder } from "obsidian";
 import OmglolPublish from "./main";
+
 
 export class SettingsTab extends PluginSettingTab {
   constructor(app: App, private plugin: OmglolPublish) {
@@ -152,19 +153,32 @@ export class SettingsTab extends PluginSettingTab {
             })
         );
 
-      if (this.plugin.settings.saveToNote) {
-        new Setting(containerEl)
-          .setName("Log note path")
-          .setDesc("Path to the log note where statuses will be saved")
-          .addText(text =>
-            text.setPlaceholder("path/to/statuslog.md")
-              .setValue(this.plugin.settings.logNotePath || "")
+        if (this.plugin.settings.saveToNote) {
+          new Setting(containerEl)
+            .setName("Log note path")
+            .setDesc("Full path to the log file (.md) folders will be created automatically")
+            .addText(text => {
+              text
+              .setPlaceholder("Logs/status-log.md")
+              .setValue(this.plugin.settings.logNotePath ?? "")
               .onChange(async (value) => {
-                this.plugin.settings.logNotePath = value;
+                this.plugin.settings.logNotePath = value.trim();
                 await this.plugin.saveSettings();
-              })
-          );
-      }
+              });
+
+            const browseBtn = text.inputEl.parentElement?.createEl("button", {
+              text: "📁",
+              cls: "clickable-icon",
+            });
+
+            browseBtn?.addEventListener("click", () => {
+              new FolderSuggest(this.app, text.inputEl, "status-log.md").open();
+            });
+
+            return text;
+          });
+        }
+
 
       new Setting(containerEl)
         .setName("Also log to Daily Note")
@@ -306,16 +320,27 @@ export class SettingsTab extends PluginSettingTab {
       if (this.plugin.settings.maintainPicsLog) {
         new Setting(containerEl)
           .setName("Log note path")
-          .setDesc("Path to the log note file")
-          .addText(text =>
-            text
-              .setPlaceholder("_pics-upload-log.md")
-              .setValue(this.plugin.settings.picsLogPath || "")
+          .setDesc("Full path to the log file (.md) folders will be created automatically")
+          .addText(text => {
+              text
+              .setPlaceholder("Logs/pics-upload-log.md")
+              .setValue(this.plugin.settings.picsLogPath ?? "")
               .onChange(async (value) => {
                 this.plugin.settings.picsLogPath = value.trim();
                 await this.plugin.saveSettings();
-              })
-          );
+              });
+
+            const browseBtn = text.inputEl.parentElement?.createEl("button", {
+              text: "📁",
+              cls: "clickable-icon",
+            });
+
+            browseBtn?.addEventListener("click", () => {
+              new FolderSuggest(this.app, text.inputEl, "pics-upload-log.md").open();
+            });
+
+            return text;
+          });
       }
 
       new Setting(containerEl)
@@ -331,3 +356,44 @@ export class SettingsTab extends PluginSettingTab {
     }
   }
 }
+
+// ===== Helper: Logic for Fuzzy Suggest for Folders =====
+  class FolderSuggest extends FuzzySuggestModal<TFolder> {
+    constructor(
+      app: App,
+      private targetInputEl: HTMLInputElement,
+      private defaultFileName: string
+    ) {
+      super(app);
+      this.setPlaceholder("Select a folder…");
+    }
+
+    getItems(): TFolder[] {
+      return this.app.vault
+        .getAllLoadedFiles()
+        .filter((f): f is TFolder => f instanceof TFolder);
+    }
+
+    getItemText(folder: TFolder): string {
+      return folder.path;
+    }
+
+    onChooseItem(folder: TFolder) {
+      const current = this.targetInputEl.value.trim();
+
+      // Extract filename if one exists
+      const parts = current.split("/");
+      const lastPart = parts[parts.length - 1];
+      const hasFilename = lastPart && !current.endsWith("/");
+
+      const filename = hasFilename ? lastPart : this.defaultFileName;
+
+      this.targetInputEl.value = `${folder.path}/${filename}`;
+      this.targetInputEl.dispatchEvent(new Event("input"));
+    }
+
+  }
+
+
+
+

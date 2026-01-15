@@ -5,6 +5,8 @@ import moment from "moment";
 import GraphemeSplitter from "grapheme-splitter";
 import { getDailyNote, createDailyNote, getAllDailyNotes } from "obsidian-daily-notes-interface";
 import { StatusPostModal } from "./statuspostmodal";
+import { normalizePath } from "obsidian";
+
 
 export class StatusPublisher {
   constructor(
@@ -111,6 +113,8 @@ export class StatusPublisher {
     const safeStatus = status.replace(/[\[\]]/g, "\\$&");
     const content = `\n- **${timestamp}**: (*[Link to status.lol](${url || "#"})*) - ${safeStatus}`;
 
+    await this.ensureFolderExists(fullPath);
+
     const file = this.app.vault.getAbstractFileByPath(fullPath);
     if (file instanceof TFile) {
       await this.app.vault.append(file, content);
@@ -118,4 +122,14 @@ export class StatusPublisher {
       await this.app.vault.create(fullPath, content);
     }
   }
+  private async ensureFolderExists(path: string) {
+    const normalized = normalizePath(path);
+    const folderPath = normalized.split("/").slice(0, -1).join("/");
+    if (!folderPath) return;
+
+    if (!this.app.vault.getAbstractFileByPath(folderPath)) {
+      await this.app.vault.createFolder(folderPath);
+    }
+  }
+
 }
