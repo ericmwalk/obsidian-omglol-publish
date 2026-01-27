@@ -365,23 +365,13 @@ export class WeblogPublisher {
     return match ? content.substring(match[0].length).trim() : content.trim();
   }
 
+// Added this to help perserve existing Frontmatter
   private async injectOrUpdateFrontmatter(file: TFile, entryId: string, slug: string) {
-    const content = await this.app.vault.read(file);
-    const updated = content.replace(
-      /^---([\s\S]*?)---/,
-      (_, yamlBlock) => {
-        const lines = yamlBlock.trim().split("\n");
-        const cleanedLines = lines.filter((line: string) =>
-          !line.startsWith("entry:") && !line.startsWith("slug:")
-        );
-        cleanedLines.push(`entry: ${entryId}`);
-        if (slug) cleanedLines.push(`slug: ${slug}`);
-        return `---\n${cleanedLines.join("\n")}\n---`;
-      }
-    );
-
-    const needsBlankLine = updated.match(/^---[\s\S]*?---\n?/)?.[0]?.endsWith("\n") ? "" : "\n";
-    await this.app.vault.modify(file, updated + needsBlankLine);
+    await this.app.fileManager.processFrontMatter(file, (fm) => {
+      fm.entry = entryId;
+      if (slug && slug.trim().length) fm.slug = slug.trim();
+      else delete fm.slug;
+    });
   }
 
   private getSafeDate(date: string | undefined): string {
@@ -420,28 +410,25 @@ export class WeblogPublisher {
       type: metadata?.type,
     };
 
+// Fix for existing Frontmatter
     new WeblogFrontmatterModal(this.app, async (values) => {
-      const fm = [
-        "---",
-        values.title ? `title: ${values.title}` : "",
-        `date: ${values.date}`,
-        `status: ${values.status}`,
-        values.isPage ? "type: page" : "",
-        values.tags.length
-          ? `tags:\n${values.tags.map(t => `  - ${t}`).join("\n")}`
-          : "",
-        "---",
-      ].filter(Boolean).join("\n");
+      await this.app.fileManager.processFrontMatter(file, (fm) => {
+        // Only set what your plugin owns
+        if (values.title?.trim()) fm.title = values.title.trim();
+        else delete fm.title;
 
-      await this.app.vault.modify(file, `${fm}\n\n${this.stripFrontmatter(content)}`);
+        fm.date = values.date.trim();
+        fm.status = values.status;
+        if (values.isPage) fm.type = "page";
+        else delete fm.type;
 
-      // wait for metadataCache refresh, then retry publish
-      setTimeout(() => {
-        this.publishCurrentNote();
-      }, 300);
+        if (values.tags?.length) fm.tags = values.tags;
+        else delete fm.tags;
+      });
+
+      setTimeout(() => this.publishCurrentNote(), 300);
     }, existing).open();
   }
-
 
   // ===== Delete Logic =====
   private async deleteCurrentPost() {
