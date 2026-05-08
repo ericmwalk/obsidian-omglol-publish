@@ -12,6 +12,7 @@ export interface WeblogPublisherSettings {
   enableRenaming: boolean;
   renamePages: boolean;
   slugWordCount: number;
+  weblogBaseUrl: string;
 }
 
 export interface PicsUploaderSettings {
@@ -26,6 +27,7 @@ export interface PicsUploaderSettings {
 }
 export interface PastebinSettings {
   enablePastebin: boolean;
+  pastebinBaseUrl: string;
 }
 
 export interface SharedOmgSettings {
@@ -61,6 +63,7 @@ export const DEFAULT_SETTINGS: CombinedSettings = {
   enableRenaming: true,
   renamePages: false,
   slugWordCount: 5,
+  weblogBaseUrl: "",
 
   // Pics defaults
   enablePics: false,
@@ -73,5 +76,6 @@ export const DEFAULT_SETTINGS: CombinedSettings = {
 
   // Pastebin
   enablePastebin: true,
+  pastebinBaseUrl: "",
 
 };

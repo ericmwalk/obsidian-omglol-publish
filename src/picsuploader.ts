@@ -1,6 +1,13 @@
 // picsuploader.ts
 
 import { App, Notice, TFile, MarkdownView, requestUrl, Editor } from "obsidian";
+
+export interface ImageContext {
+  file?: TFile;
+  url?: string;
+  altText: string;
+  caption: string;
+}
 declare const moment: any;
 import { CombinedSettings } from "./types";
 import OmglolPublish from "./main";
@@ -443,29 +450,32 @@ export class PicsUploader {
     return btoa(binary);
   }
 
-  public resolveImageFromContext(): TFile | string | null {
+  public resolveImageFromContext(): ImageContext | null {
     const editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
     if (editor) {
       const cursor = editor.getCursor();
       const line = editor.getLine(cursor.line);
+      const nextLine = editor.getLine(cursor.line + 1) || "";
+      const captionMatch = nextLine.match(/^\*(?!\*)(.+)\*$/);
+      const caption = captionMatch ? captionMatch[1] : "";
 
       // Case 1: Obsidian-style embed
       const embedMatch = line.match(/!\[\[(.*?)\]\]/);
       if (embedMatch) {
         const file = this.app.metadataCache.getFirstLinkpathDest(embedMatch[1], "");
-        if (file instanceof TFile) return file;
+        if (file instanceof TFile) return { file, altText: "", caption };
       }
 
-      // Case 2: Markdown remote image
-      const remoteMatch = line.match(/!\[.*?\]\((https?:\/\/[^\s)]+\.(?:jpg|jpeg|png|gif|webp))\)/i);
+      // Case 2: Markdown remote image — capture existing alt text
+      const remoteMatch = line.match(/!\[(.*?)\]\((https?:\/\/[^\s)]+\.(?:jpg|jpeg|png|gif|webp))\)/i);
       if (remoteMatch) {
-        return remoteMatch[1]; // return the URL directly
+        return { url: remoteMatch[2], altText: remoteMatch[1], caption };
       }
     }
 
     const activeFile = this.app.workspace.getActiveFile();
     if (activeFile && activeFile.extension.match(/(png|jpg|jpeg|gif|webp)$/i)) {
-      return activeFile;
+      return { file: activeFile, altText: "", caption: "" };
     }
 
     return null;

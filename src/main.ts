@@ -91,38 +91,47 @@ export default class OmglolPublish extends Plugin {
       });
       
       this.addRibbonIcon("image-plus", "Upload photo to some.pics", async () => {
-        const file = this.picsUploader?.resolveImageFromContext();
+        const ctx = this.picsUploader?.resolveImageFromContext();
 
-        if (!file) {
+        if (!ctx) {
           new Notice("Select an image file or place cursor on an image embed in a note.");
           return;
         }
 
-        // Handle remote image URLs directly
-          if (typeof file === "string") {
-            // 🟣 Remote image (Bunny, CDN, etc.)
-            new PicUploadModal(this.app, this.picsUploader!, null, undefined, { remoteUrl: file }).open();
-            return;
-          }
-
-
-        // 🟣 Handle local file uploads (open the modal)
-          if (file instanceof TFile) {
-            new PicUploadModal(this.app, this.picsUploader!, file).open();
-          } else {
-            new Notice("Unsupported selection.");
-          }
-        });
+        if (ctx.url) {
+          new PicUploadModal(this.app, this.picsUploader!, null, undefined, {
+            remoteUrl: ctx.url,
+            alt_text: ctx.altText,
+            description: ctx.caption,
+          }).open();
+        } else if (ctx.file) {
+          new PicUploadModal(this.app, this.picsUploader!, ctx.file, undefined,
+            (ctx.caption || ctx.altText) ? { description: ctx.caption, alt_text: ctx.altText } : undefined
+          ).open();
+        } else {
+          new Notice("Unsupported selection.");
+        }
+      });
 
 
       this.addCommand({
         id: "upload-pic",
         name: "Upload image to some.pics",
         checkCallback: (checking) => {
-          const file = this.picsUploader?.resolveImageFromContext();
-          if (file) {
+          const ctx = this.picsUploader?.resolveImageFromContext();
+          if (ctx) {
             if (!checking) {
-              new PicUploadModal(this.app, this.picsUploader!, (typeof file === "string" ? null : file)).open();
+              if (ctx.url) {
+                new PicUploadModal(this.app, this.picsUploader!, null, undefined, {
+                  remoteUrl: ctx.url,
+                  alt_text: ctx.altText,
+                  description: ctx.caption,
+                }).open();
+              } else {
+                new PicUploadModal(this.app, this.picsUploader!, ctx.file ?? null, undefined,
+                  (ctx.caption || ctx.altText) ? { description: ctx.caption, alt_text: ctx.altText } : undefined
+                ).open();
+              }
             }
             return true;
           }
@@ -225,7 +234,8 @@ export default class OmglolPublish extends Plugin {
       this.pastebinPublisher = new PasteBinPublisher(
         this.app,
         this.settings.token,
-        this.settings.username
+        this.settings.username,
+        this.settings.pastebinBaseUrl
       );
 
       // Ribbon icon for publishing current note to paste.lol

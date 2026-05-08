@@ -68,11 +68,13 @@ export class PasteBinPublisher {
   app: App;
   token: string;
   username: string;
+  pastebinBaseUrl: string;
 
-  constructor(app: App, token: string, username: string) {
+  constructor(app: App, token: string, username: string, pastebinBaseUrl = "") {
     this.app = app;
     this.token = token;
     this.username = username;
+    this.pastebinBaseUrl = pastebinBaseUrl;
   }
 
   // ======= publish note to paste.lol =======
@@ -137,7 +139,8 @@ export class PasteBinPublisher {
         body: JSON.stringify(payload),
       });
 
-      const newUrl = `https://${this.username}.paste.lol/${normalizedTitle}`;
+      const base = this.pastebinBaseUrl?.trim() || `https://${this.username}.paste.lol`;
+      const newUrl = `${base}/${normalizedTitle}`;
 
       await this.setFrontmatter(file, {
         ...frontmatter,

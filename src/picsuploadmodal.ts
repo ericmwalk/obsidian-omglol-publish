@@ -106,7 +106,7 @@ export class PicUploadModal extends Modal {
         text.inputEl.classList.add("somepics-textarea");
       });
 
-    new Setting(contentEl)
+    const altSetting = new Setting(contentEl)
       .setName("Alt Text")
       .addTextArea((text) => {
         text
@@ -118,6 +118,21 @@ export class PicUploadModal extends Modal {
         text.inputEl.rows = 2;
         text.inputEl.classList.add("somepics-textarea", "alt-text-field");
       });
+
+    if (this.uploader.settings.chatgptApiKey) {
+      altSetting.addButton((btn) => {
+        btn.setButtonText("Generate").onClick(async () => {
+          const imageUrl = this.remoteUrl || this.previewUrl;
+          if (!imageUrl) return;
+          btn.setButtonText("...").setDisabled(true);
+          const alt = await this.uploader.generateAltText(imageUrl, this.file?.name || "image");
+          this.altText = alt;
+          const altField = this.contentEl.querySelector(".alt-text-field") as HTMLTextAreaElement | null;
+          if (altField) altField.value = alt;
+          btn.setButtonText("Generate").setDisabled(false);
+        });
+      });
+    }
 
     new Setting(contentEl)
       .setName("Hide from public feed")
@@ -135,26 +150,7 @@ export class PicUploadModal extends Modal {
         .setCta()
         .onClick(async () => {
           try {
-            let finalAlt = this.altText;
-
-            // 🧠 Generate alt text only if blank and GPT key set
-            if (!finalAlt && this.uploader.settings.chatgptApiKey) {
-              const imageUrl = this.remoteUrl || this.previewUrl;
-              if (imageUrl) {
-                new Notice("Generating alt text...");
-                finalAlt = await this.uploader.generateAltText(
-                  imageUrl,
-                  this.file?.name || "image"
-                );
-                this.altText = finalAlt;
-
-                // 🪄 Update modal field live
-                const altField = this.contentEl.querySelector(
-                  ".alt-text-field"
-                ) as HTMLInputElement | null;
-                if (altField) altField.value = finalAlt;
-              }
-            }
+            const finalAlt = this.altText;
 
             // === Perform upload or update ===
             if (this.remoteUrl) {

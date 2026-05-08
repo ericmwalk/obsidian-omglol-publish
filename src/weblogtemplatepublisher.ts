@@ -102,7 +102,8 @@ export class WeblogTemplatePublisher {
     // ===== MAIN TEMPLATE =====
     if (isMainTemplate) {
       const confirmed = await this.confirmTemplateAction(
-        "This will immediately replace your live weblog template for all pages."
+        "This will immediately replace your live weblog template for all pages.",
+        "Update"
       );
 
       if (!confirmed) return;
@@ -136,7 +137,8 @@ export class WeblogTemplatePublisher {
 
     if (entry) {
       const confirmed = await this.confirmTemplateAction(
-        `This will overwrite the existing template "${title}".`
+        `This will overwrite the existing template "${title}".`,
+        "Overwrite"
       );
       if (!confirmed) return;
     }
@@ -274,7 +276,7 @@ export class WeblogTemplatePublisher {
     await this.app.vault.modify(file, updated);
   }
 
-  private async confirmTemplateAction(message: string): Promise<boolean> {
+  private async confirmTemplateAction(message: string, confirmLabel = "Delete"): Promise<boolean> {
     return new Promise((resolve) => {
       const modal = new Modal(this.app);
       modal.modalEl.addClass("omg-confirm-modal");
@@ -298,7 +300,7 @@ export class WeblogTemplatePublisher {
         });
 
       new ButtonComponent(buttonRow)
-        .setButtonText("Delete")
+        .setButtonText(confirmLabel)
         .setCta()
         .onClick(() => {
           modal.close();

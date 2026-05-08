@@ -111,8 +111,27 @@ export class SettingsTab extends PluginSettingTab {
             .onChange(async (value) => {
               this.plugin.settings.enablePastebin = value;
               await this.plugin.saveSettings();
+              this.display();
             })
         );
+
+    // === paste.lol Settings ===
+    if (this.plugin.settings.enablePastebin) {
+      containerEl.createEl("h4", { text: "paste.lol Settings" });
+
+      new Setting(containerEl)
+        .setName("Paste base URL")
+        .setDesc("Only needed if you use a custom domain. Leave blank to use username.paste.lol automatically.")
+        .addText(text =>
+          text
+            .setPlaceholder("https://username.paste.lol")
+            .setValue(this.plugin.settings.pastebinBaseUrl || "")
+            .onChange(async (value) => {
+              this.plugin.settings.pastebinBaseUrl = value.trim().replace(/\/$/, "");
+              await this.plugin.saveSettings();
+            })
+        );
+    }
 
     // === Status.lol Settings ===
     if (this.plugin.settings.enableStatusPoster) {
@@ -236,6 +255,19 @@ export class SettingsTab extends PluginSettingTab {
                 this.plugin.settings.slugWordCount = num;
                 await this.plugin.saveSettings();
               }
+            })
+        );
+
+      new Setting(containerEl)
+        .setName("Weblog base URL")
+        .setDesc("Only needed if you use a custom domain. Leave blank to use username.weblog.lol automatically. (e.g. https://runs.lol)")
+        .addText(text =>
+          text
+            .setPlaceholder("https://username.weblog.lol")
+            .setValue(this.plugin.settings.weblogBaseUrl || "")
+            .onChange(async (value) => {
+              this.plugin.settings.weblogBaseUrl = value.trim().replace(/\/$/, "");
+              await this.plugin.saveSettings();
             })
         );
     }

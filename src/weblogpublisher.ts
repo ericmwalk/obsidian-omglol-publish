@@ -87,7 +87,16 @@ export class WeblogPublisher {
     const apiStatus = metadata.status?.trim();
     const statusLine = apiStatus ? `Status: ${apiStatus}\n` : "";
 
-    const bodyContent = this.stripFrontmatter(content);
+    const rawBody = this.stripFrontmatter(content);
+    const pathFormat = await this.getPostPathFormat();
+    const { resolved: bodyContent, unresolvedPublished } = this.resolveWikilinks(rawBody, file.path, pathFormat);
+    const imageEmbeds = this.detectImageEmbeds(bodyContent);
+
+    if (unresolvedPublished.length > 0 || imageEmbeds.length > 0) {
+      const proceed = await this.warnAndConfirm(unresolvedPublished, imageEmbeds);
+      if (!proceed) return;
+    }
+
     const titleLine = useTitle.length > 0 ? `Title: ${useTitle}\n` : "";
 
     const fullPost = `${titleLine}Slug: ${slug}\nDate: ${date}\n${validTypeLine}${statusLine}${tagsLine}\n${bodyContent}`;
@@ -152,7 +161,7 @@ export class WeblogPublisher {
   }
 
   // Publishes a single file (used by batchPublish)
-    public async publishFile(file: TFile) {
+    public async publishFile(file: TFile, pathFormat?: string) {
       const content = await this.app.vault.read(file);
       const metadata = this.app.metadataCache.getCache(file.path)?.frontmatter;
 
@@ -179,7 +188,9 @@ export class WeblogPublisher {
       const apiStatus = metadata.status?.trim();
       const statusLine = apiStatus ? `Status: ${apiStatus}\n` : "";
 
-      const bodyContent = this.stripFrontmatter(content);
+      const rawBody = this.stripFrontmatter(content);
+      const resolvedPathFormat = pathFormat ?? await this.getPostPathFormat();
+      const { resolved: bodyContent } = this.resolveWikilinks(rawBody, file.path, resolvedPathFormat);
       const titleLine = metadata.title?.trim()
         ? `Title: ${metadata.title.trim()}\n`
         : "";
@@ -301,12 +312,13 @@ export class WeblogPublisher {
 
       new Notice(`Starting batch publish (${markdownFiles.length} files)…`);
       let publishedCount = 0;
+      const batchPathFormat = await this.getPostPathFormat();
 
       for (const file of markdownFiles) {
         try {
           const metadata = this.app.metadataCache.getCache(file.path)?.frontmatter;
           if (metadata?.status?.toLowerCase() === "published") {
-            await this.publishFile(file);
+            await this.publishFile(file, batchPathFormat);
             publishedCount++;
           }
         } catch (err) {
@@ -520,6 +532,154 @@ export class WeblogPublisher {
     await this.app.vault.modify(file, updated);
   }
 
+
+private resolveWikilinks(body: string, sourceFilePath: string, pathFormat: string): {
+  resolved: string;
+  unresolvedPublished: string[];
+} {
+  const unresolvedPublished: string[] = [];
+  // Match [[file]], [[file|alias]], [[file#heading]], [[file#heading|alias]]
+  // Negative lookbehind excludes ![[...]] image embeds
+  const wikilinkRegex = /(?<!\!)\[\[([^\]#|]+)(?:#[^\]|]*)?\|?([^\]]*)\]\]/g;
+
+  const resolved = body.replace(wikilinkRegex, (_match, filename, alias) => {
+    const name = filename.trim();
+    const displayText = alias?.trim() || name;
+
+    const file = this.app.metadataCache.getFirstLinkpathDest(name, sourceFilePath);
+    if (!file) return displayText;
+
+    const fm = this.app.metadataCache.getCache(file.path)?.frontmatter;
+    const slug = fm?.slug?.trim();
+
+    if (slug) {
+      const base = this.settings.weblogBaseUrl?.trim()
+        || `https://${this.settings.username}.weblog.lol`;
+      const isPage = fm?.type?.toLowerCase() === "page";
+      const datePath = !isPage && fm?.date ? this.applyPhpDateFormat(pathFormat, String(fm.date)) : "";
+      const url = datePath ? `${base}${datePath}${slug}` : `${base}/${slug}`;
+      return `[${displayText}](${url})`;
+    }
+
+    if (fm?.paste_url) {
+      const customBase = this.settings.pastebinBaseUrl?.trim();
+      const url = customBase && fm?.paste_id
+        ? `${customBase}/${fm.paste_id}`
+        : fm.paste_url;
+      return `[${displayText}](${url})`;
+    }
+
+    if (fm?.status?.toLowerCase() === "published") {
+      unresolvedPublished.push(displayText);
+    }
+
+    return displayText;
+  });
+
+  return { resolved, unresolvedPublished };
+}
+
+private async getPostPathFormat(): Promise<string> {
+  const defaultFormat = "/Y/m/d/";
+
+  // 1. Check vault for a weblog configuration note
+  const configFile = this.app.vault.getAllLoadedFiles().find((f): f is TFile => {
+    if (!(f instanceof TFile)) return false;
+    const fm = this.app.metadataCache.getCache(f.path)?.frontmatter;
+    return fm?.type === "weblog" && fm?.entry === "configuration";
+  });
+
+  if (configFile) {
+    try {
+      const content = await this.app.vault.read(configFile);
+      const match = content.match(/^Post path format:\s*(.+)$/m);
+      if (match?.[1]?.trim()) return match[1].trim();
+    } catch {
+      // fall through
+    }
+  }
+
+  // 2. Fetch from API if not found in vault
+  try {
+    const resp = await requestUrl({
+      method: "GET",
+      url: `https://api.omg.lol/address/${this.settings.username}/weblog/configuration`,
+      headers: {
+        Authorization: `Bearer ${this.settings.apiToken || this.settings.token}`,
+      },
+    });
+    const configText: string = resp.json?.response?.configuration ?? "";
+    if (configText) {
+      const match = configText.match(/^Post path format:\s*(.+)$/m);
+      if (match?.[1]?.trim()) return match[1].trim();
+    }
+  } catch {
+    // fall through to default
+  }
+
+  return defaultFormat;
+}
+
+private applyPhpDateFormat(format: string, dateStr: string): string {
+  const safeDate = this.getSafeDate(dateStr);
+  if (!safeDate.match(/^\d{4}-\d{2}-\d{2}$/)) return "";
+
+  const [year, month, day] = safeDate.split("-");
+
+  return format
+    .replace(/Y/g, year)
+    .replace(/y/g, year.slice(2))
+    .replace(/m/g, month)
+    .replace(/n/g, String(parseInt(month)))
+    .replace(/d/g, day)
+    .replace(/j/g, String(parseInt(day)));
+}
+
+private detectImageEmbeds(body: string): string[] {
+  return [...body.matchAll(/!\[\[([^\]]+)\]\]/g)].map(m => m[1]);
+}
+
+private async warnAndConfirm(unresolvedLinks: string[], imageEmbeds: string[]): Promise<boolean> {
+  return new Promise((resolve) => {
+    const modal = new Modal(this.app);
+    modal.titleEl.setText("Publishing Warnings");
+
+    if (unresolvedLinks.length > 0) {
+      modal.contentEl.createEl("p", {
+        text: `${unresolvedLinks.length} link(s) point to notes marked as published but not yet pushed — they'll appear as plain text:`,
+      });
+      const ul = modal.contentEl.createEl("ul");
+      for (const link of unresolvedLinks) {
+        ul.createEl("li", { text: link });
+      }
+    }
+
+    if (imageEmbeds.length > 0) {
+      modal.contentEl.createEl("p", {
+        text: `${imageEmbeds.length} image embed(s) haven't been uploaded — they won't display on your weblog:`,
+      });
+      const ul = modal.contentEl.createEl("ul");
+      for (const img of imageEmbeds) {
+        ul.createEl("li", { text: img });
+      }
+    }
+
+    modal.contentEl.createEl("p", { text: "Cancel to fix first, or publish anyway?" });
+
+    const buttonRow = modal.contentEl.createDiv({ cls: "modal-button-container" });
+
+    new ButtonComponent(buttonRow)
+      .setButtonText("Cancel")
+      .onClick(() => { modal.close(); resolve(false); });
+
+    new ButtonComponent(buttonRow)
+      .setButtonText("Publish Anyway")
+      .setCta()
+      .onClick(() => { modal.close(); resolve(true); });
+
+    modal.open();
+  });
+}
 
 private async confirmDelete(message: string): Promise<boolean> {
   return new Promise((resolve) => {
