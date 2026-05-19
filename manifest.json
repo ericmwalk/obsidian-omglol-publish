@@ -1,10 +1,10 @@
 {
 	"id": "statuslol-post",
 	"name": "OMG.lol Publisher",
-	"minAppVersion": "0.15.0",
+	"minAppVersion": "1.4.4",
 	"description": "Allows you to post to weblogs.lol, status.lol, some.pics and paste.lol.",
 	"author": "Eric Walker",
 	"authorUrl": "https://runs.lol",
 	"isDesktopOnly": false,
-	"version": "2.6.0"
+	"version": "2.6.1"
 }

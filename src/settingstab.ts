@@ -11,7 +11,7 @@ export class SettingsTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h1", { text: "omg.lol Plugin Settings" });
+    new Setting(containerEl).setName("omg.lol Plugin Settings").setHeading();
 
     // === Shared OMG Settings ===
     new Setting(containerEl)
@@ -44,12 +44,8 @@ export class SettingsTab extends PluginSettingTab {
         text.inputEl.type = "password";
 
         // Eye toggle
-        const eyeIcon = containerEl.createEl("div", { cls: "clickable-icon" });
+        const eyeIcon = containerEl.createDiv({ cls: "clickable-icon omg-eye-icon" });
         setIcon(eyeIcon, "eye");
-        eyeIcon.style.cursor = "pointer";
-        eyeIcon.style.marginLeft = "8px";
-        eyeIcon.style.display = "flex";
-        eyeIcon.style.alignItems = "center";
 
         let visible = false;
         eyeIcon.onclick = () => {
@@ -64,7 +60,7 @@ export class SettingsTab extends PluginSettingTab {
         return text;
       });
 
-    containerEl.createEl("h3", { text: "omg.lol Modules Enabled" });
+    new Setting(containerEl).setName("omg.lol Modules Enabled").setHeading();
     // === Status.lol ===
     new Setting(containerEl)
       .setName("Status.lol")
@@ -117,7 +113,7 @@ export class SettingsTab extends PluginSettingTab {
 
     // === paste.lol Settings ===
     if (this.plugin.settings.enablePastebin) {
-      containerEl.createEl("h4", { text: "paste.lol Settings" });
+      new Setting(containerEl).setName("paste.lol Settings").setHeading();
 
       new Setting(containerEl)
         .setName("Paste base URL")
@@ -135,7 +131,7 @@ export class SettingsTab extends PluginSettingTab {
 
     // === Status.lol Settings ===
     if (this.plugin.settings.enableStatusPoster) {
-      containerEl.createEl("h4", { text: "Status Settings" });
+      new Setting(containerEl).setName("Status Settings").setHeading();
 
       new Setting(containerEl)
         .setName("Default emoji")
@@ -213,7 +209,7 @@ export class SettingsTab extends PluginSettingTab {
 
     // === Weblog.lol Settings===
     if (this.plugin.settings.enableWeblog) {
-      containerEl.createEl("h4", { text: "Weblog Settings" });
+      new Setting(containerEl).setName("Weblog Settings").setHeading();
 
       new Setting(containerEl)
         .setName("Enable automatic renaming")
@@ -274,7 +270,7 @@ export class SettingsTab extends PluginSettingTab {
 
     // === some.pics Settings===
     if (this.plugin.settings.enablePics) {
-      containerEl.createEl("h4", { text: "some.pics Settings" });
+      new Setting(containerEl).setName("some.pics Settings").setHeading();
 
       new Setting(containerEl)
         .setName("Default tags")

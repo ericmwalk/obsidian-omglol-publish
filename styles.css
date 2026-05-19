@@ -43,15 +43,6 @@
   font-size: 0.95em;
 }
 
-.modal.mod-prompt .modal-content,
-.modal .modal-content {
-  max-height: 80vh;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: 1rem;
-}
-
 /* Extra bottom padding for mobile keyboards */
 @media (max-width: 600px) {
   .modal.mod-prompt .modal-content,
@@ -75,6 +66,25 @@
 /* Optional: improve spacing of settings for readability */
 .modal .setting-item {
   margin-bottom: 0.75rem;
+}
+
+.edit-somepics-link {
+  cursor: pointer;
+}
+
+.somepics-preview-img {
+  max-width: 200px;
+  display: block;
+  margin: 0 auto 15px auto;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+.omg-eye-icon {
+  cursor: pointer;
+  margin-left: 8px;
+  display: flex;
+  align-items: center;
 }
 
 .omg-confirm-modal .modal-button-container {

@@ -36,6 +36,11 @@
 - Checks the line immediately after the image for `*italic caption text*` (single asterisks) and pre-fills the description field with the plain text — matches Eric's CSS convention for image captions
 - GPT alt text generation is now opt-in: removed auto-generation on submit, added a "Generate" button next to the alt text field (only shown when a ChatGPT API key is configured)
 
+### paste.lol — publish any file type without fenced code block
+- Removed hard requirement for content to be wrapped in a fenced code block
+- Non-markdown files (`.css`, `.sh`, `.js`, etc.) now publish their raw content directly
+- Markdown files with a fenced block still use the block content as before; markdown files without one now fall back to the full body rather than throwing a silent error
+
 ### Template confirm modal — correct button labels
 - `confirmTemplateAction()` shared modal was always showing "Delete" regardless of the action
 - Added a `confirmLabel` parameter: overwriting the main template shows "Update", overwriting a named template shows "Overwrite", deleting shows "Delete"

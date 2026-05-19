@@ -173,8 +173,6 @@ export class WeblogPublisher {
       const date = metadata.date?.trim() || new Date().toISOString();
       const entryId = metadata.entry;
 
-      const wasUpdate = Boolean(metadata.entry);
-      const status = metadata.status?.toLowerCase();
 
       const tagsArray = metadata.tags ?? [];
       const tagsLine = Array.isArray(tagsArray) && tagsArray.length > 0
@@ -243,8 +241,6 @@ export class WeblogPublisher {
 
     // Select a folder to publish
     const selectedFolder = await new Promise<string | null>((resolve) => {
-      const self = this;
-
       class FolderSelectModal extends FuzzySuggestModal<string> {
         folders: string[];
 
@@ -261,7 +257,7 @@ export class WeblogPublisher {
           return item;
         }
 
-        onChooseItem(item: string, evt: MouseEvent | KeyboardEvent): void {
+        onChooseItem(item: string, _evt: MouseEvent | KeyboardEvent): void {
           // Resolve immediately when item chosen
           resolve(item);
           // Close the modal cleanly after resolving
@@ -270,11 +266,11 @@ export class WeblogPublisher {
 
         onClose(): void {
           // Only resolve null if user closed manually (no selection)
-          setTimeout(() => resolve(null), 10);
+          activeWindow.setTimeout(() => resolve(null), 10);
         }
       }
 
-      const modal = new FolderSelectModal(self.app, folders);
+      const modal = new FolderSelectModal(this.app, folders);
       modal.setPlaceholder("Select folder to batch publish");
       modal.open();
     });
@@ -413,7 +409,8 @@ export class WeblogPublisher {
     }
   }
 
-  private promptForFrontmatter(file: TFile, content: string, metadata?: any) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private promptForFrontmatter(file: TFile, _content: string, metadata?: any) {
     const existing: Partial<WeblogFrontmatterValues & { type?: string }> = {
       title: metadata?.title,
       date: metadata?.date,
@@ -438,7 +435,7 @@ export class WeblogPublisher {
         else delete fm.tags;
       });
 
-      setTimeout(() => this.publishCurrentNote(), 300);
+      activeWindow.setTimeout(() => { void this.publishCurrentNote(); }, 300);
     }, existing).open();
   }
 

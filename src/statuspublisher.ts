@@ -1,4 +1,4 @@
-import { App, Notice, Plugin, TFile, requestUrl } from "obsidian";
+import { App, Notice, TFile, requestUrl } from "obsidian";
 import { CombinedSettings } from "./types";
 import { OmglolPublish } from "./main";
 import moment from "moment";
@@ -110,7 +110,7 @@ export class StatusPublisher {
   private async appendToNote(notePath: string, status: string, url: string) {
     const fullPath = `${notePath}.md`;
     const timestamp = moment().format("YYYY-MM-DD HH:mm");
-    const safeStatus = status.replace(/[\[\]]/g, "\\$&");
+    const safeStatus = status.replace(/[[\]]/g, "\\$&");
     const content = `\n- **${timestamp}**: (*[Link to status.lol](${url || "#"})*) - ${safeStatus}`;
 
     await this.ensureFolderExists(fullPath);

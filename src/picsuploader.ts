@@ -109,7 +109,7 @@ export class PicsUploader {
         });
 
         if (this.settings.deleteAfterUpload) {
-          await this.app.vault.delete(file);
+          await this.app.fileManager.trashFile(file);
         }
       } catch (e) {
         console.error(`Upload failed for ${filename}:`, e);
@@ -171,7 +171,6 @@ export class PicsUploader {
         // === CASE 1: Remote URL upload (e.g. Bunny CDN image) ===
         if (typeof fileOrUrl === "string" && fileOrUrl.startsWith("http")) {
           filename = fileOrUrl.split("/").pop() || "remote-image.jpg";
-          console.log("🌐 Uploading remote image URL to some.pics:", fileOrUrl);
 
           // Step 1: Download the remote image
           const remoteResp = await requestUrl({ url: fileOrUrl, method: "GET" });

@@ -1,14 +1,12 @@
 // ======= Initialization and Processing ======= 
 
-import { App, Plugin, Notice, MarkdownView, TFile } from "obsidian";
-import { getDailyNote, createDailyNote, getAllDailyNotes } from "obsidian-daily-notes-interface";
+import { Plugin, Notice, MarkdownView, TFile } from "obsidian";
 import { CombinedSettings, DEFAULT_SETTINGS } from "./types";
 import { SettingsTab } from "./settingstab";
 import { WeblogPublisher } from "./weblogpublisher";
 import { StatusPublisher } from "./statuspublisher";
 import { PicsUploader } from "./picsuploader";
 import { PasteBinPublisher } from "./pastebinpublisher";
-import { PasteModal } from "./pastemodal";
 import { PicUploadModal } from "./picsuploadmodal";
 import { WeblogTemplatePublisher } from "./weblogtemplatepublisher";
 import { WeblogConfigurationPublisher } from "./weblogconfigurationpublisher";
@@ -28,15 +26,19 @@ export default class OmglolPublish extends Plugin {
   async onload() {
     await this.loadSettings();
 
+    const internalApp = this.app as unknown as {
+      internalPlugins?: { getPluginById(id: string): { enabled?: boolean } | null };
+      plugins?: { enabledPlugins?: Set<string> };
+    };
     this.dailyPluginAvailable =
-      (this.app as any).internalPlugins?.getPluginById("daily-notes")?.enabled ||
-      (this.app as any).plugins?.enabledPlugins?.has("periodic-notes");
+      internalApp.internalPlugins?.getPluginById("daily-notes")?.enabled === true ||
+      internalApp.plugins?.enabledPlugins?.has("periodic-notes") === true;
 
     // === Status.lol ===
     if (this.settings.enableStatusPoster) {
       this.statusPublisher = new StatusPublisher(this.app, this.settings, this);
       this.addRibbonIcon("megaphone", "Post to status.lol", () => {
-        this.statusPublisher?.showStatusModal();
+        void this.statusPublisher?.showStatusModal();
       });
     }
     // === Status.lol Bio ===
@@ -49,7 +51,7 @@ export default class OmglolPublish extends Plugin {
     if (this.settings.enableWeblog) {
       this.weblogPublisher = new WeblogPublisher(this.app, this.settings, this);
       this.addRibbonIcon("send", "Publish to omg.lol Weblog", () => {
-        this.weblogPublisher?.publishCurrentNote?.();
+        void this.weblogPublisher?.publishCurrentNote?.();
       });
     }
 
@@ -81,7 +83,7 @@ export default class OmglolPublish extends Plugin {
       this.picsUploader = new PicsUploader(this.app, this.settings, this);
 
       this.addRibbonIcon("images", "Upload images in note to some.pics", () => {
-        this.picsUploader?.uploadAllEmbedsInNote();
+        void this.picsUploader?.uploadAllEmbedsInNote();
       });
 
       this.addCommand({
@@ -155,7 +157,7 @@ export default class OmglolPublish extends Plugin {
         const line = editor.getLine(cursor.line);
 
         // Regex to catch Markdown image/link URLs or raw URLs
-        const urlRegex = /\!\[.*?\]\((https?:\/\/[^\s)]+)\)|https?:\/\/[^\s)]+/g;
+        const urlRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)|https?:\/\/[^\s)]+/g;
 
         let match: RegExpExecArray | null;
         let foundUrl: string | null = null;
@@ -211,14 +213,14 @@ export default class OmglolPublish extends Plugin {
 
 
     // Turn [[edit-somepics-<id>]] into clickable edit buttons
-    this.registerMarkdownPostProcessor((el, ctx) => {
+    this.registerMarkdownPostProcessor((el, _ctx) => {
       el.querySelectorAll("a").forEach((link: HTMLAnchorElement) => {
         const match = link.getAttribute("href")?.match(/^edit-somepics-(.+)$/);
         if (match) {
           const picId = match[1];
 
           link.innerText = "✏️ Edit";
-          link.style.cursor = "pointer";
+          link.addClass("edit-somepics-link");
 
           link.addEventListener("click", (evt) => {
             evt.preventDefault();
@@ -242,7 +244,7 @@ export default class OmglolPublish extends Plugin {
       this.addRibbonIcon("clipboard", "Publish to paste.lol", () => {
         const file = this.app.workspace.getActiveFile();
         if (file) {
-          this.pastebinPublisher?.publishCurrentNote(file);
+          void this.pastebinPublisher?.publishCurrentNote(file);
         } else {
           new Notice("No active note to publish.");
         }
@@ -256,7 +258,7 @@ export default class OmglolPublish extends Plugin {
           const file = this.app.workspace.getActiveFile();
           if (file) {
             if (!checking) {
-              this.pastebinPublisher?.publishCurrentNote(file);
+              void this.pastebinPublisher?.publishCurrentNote(file);
             }
             return true;
           }
@@ -272,7 +274,7 @@ export default class OmglolPublish extends Plugin {
           const file = this.app.workspace.getActiveFile();
           if (file) {
             if (!checking) {
-              this.pastebinPublisher?.deletePaste(file);
+              void this.pastebinPublisher?.deletePaste(file);
             }
             return true;
           }

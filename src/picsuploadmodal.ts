@@ -61,22 +61,12 @@ export class PicUploadModal extends Modal {
 
     // Thumbnail preview if editing
     if (!this.file && this.previewUrl) {
-      const img = contentEl.createEl("img", { attr: { src: this.previewUrl } });
-      img.style.maxWidth = "200px";
-      img.style.display = "block";
-      img.style.margin = "0 auto 15px auto"; // centered
-      img.style.borderRadius = "6px";
-      img.style.boxShadow = "0 2px 6px rgba(0,0,0,0.3)";
+      contentEl.createEl("img", { attr: { src: this.previewUrl }, cls: "somepics-preview-img" });
     }
 
-    // 🆕 Show preview for remote upload
+    // Show preview for remote upload
     if (this.remoteUrl) {
-      const img = contentEl.createEl("img", { attr: { src: this.remoteUrl } });
-      img.style.maxWidth = "200px";
-      img.style.display = "block";
-      img.style.margin = "0 auto 15px auto";
-      img.style.borderRadius = "6px";
-      img.style.boxShadow = "0 2px 6px rgba(0,0,0,0.3)";
+      contentEl.createEl("img", { attr: { src: this.remoteUrl }, cls: "somepics-preview-img" });
     }
 
     // === Prefilled fields ===

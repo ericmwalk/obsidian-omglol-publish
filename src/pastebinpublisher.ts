@@ -104,8 +104,14 @@ export class PasteBinPublisher {
     const rawTitle = title || file.basename;
     const normalizedTitle = normalizePasteTitle(rawTitle);
 
-    // Fenced content only
-    const { content } = extractFencedContent(body);
+    // Use fenced code block if present, otherwise fall back to raw body
+    let content: string;
+    if (file.extension !== "md") {
+      content = body.trim();
+    } else {
+      const fenced = body.match(/```(?:\w+)?\n([\s\S]*?)```/m);
+      content = fenced ? fenced[1].trimEnd() : body.trim();
+    }
 
     const prevId = frontmatter.paste_id as string | undefined;
     const prevListed = frontmatter.listed ?? false;
