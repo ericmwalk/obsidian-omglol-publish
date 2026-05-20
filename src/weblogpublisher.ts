@@ -1,4 +1,4 @@
-import { App, MarkdownView, Notice, Plugin, TFile, TFolder, requestUrl, normalizePath, FuzzySuggestModal, Modal, ButtonComponent } from "obsidian";
+import { App, MarkdownView, Notice, Plugin, TFile, TFolder, requestUrl, normalizePath, FuzzySuggestModal, Modal, ButtonComponent, parseYaml, stringifyYaml } from "obsidian";
 import { CombinedSettings } from "./types";
 import { WeblogFrontmatterModal, WeblogFrontmatterValues } from "./weblogfrontmattermodal";
 
@@ -41,7 +41,15 @@ export class WeblogPublisher {
 
     const file = view.file;
     const content = await this.app.vault.read(file);
-    const metadata = this.app.metadataCache.getCache(file.path)?.frontmatter;
+    let metadata = this.app.metadataCache.getCache(file.path)?.frontmatter;
+
+    // Fallback for iOS/mobile where the metadata cache (IDB) may be unavailable
+    if (!metadata) {
+      const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+      if (fmMatch) {
+        try { metadata = parseYaml(fmMatch[1]); } catch { /* leave null */ }
+      }
+    }
 
     // If no frontmatter ask for the data needed to publish
     if (!metadata) {
@@ -375,11 +383,27 @@ export class WeblogPublisher {
 
 // Added this to help perserve existing Frontmatter
   private async injectOrUpdateFrontmatter(file: TFile, entryId: string, slug: string) {
-    await this.app.fileManager.processFrontMatter(file, (fm) => {
-      fm.entry = entryId;
-      if (slug && slug.trim().length) fm.slug = slug.trim();
-      else delete fm.slug;
-    });
+    try {
+      await this.app.fileManager.processFrontMatter(file, (fm) => {
+        fm.entry = entryId;
+        if (slug && slug.trim().length) fm.slug = slug.trim();
+        else delete fm.slug;
+      });
+    } catch {
+      // Fallback for iOS where processFrontMatter may fail due to IDB unavailability
+      try {
+        const raw = await this.app.vault.read(file);
+        const fmRegex = /^---\n([\s\S]*?)\n---\n?/;
+        const match = raw.match(fmRegex);
+        if (!match) return;
+        const fm = parseYaml(match[1]) || {};
+        fm.entry = entryId;
+        if (slug && slug.trim().length) fm.slug = slug.trim();
+        else delete fm.slug;
+        const newFm = `---\n${stringifyYaml(fm).trim()}\n---\n\n`;
+        await this.app.vault.modify(file, raw.replace(fmRegex, newFm));
+      } catch { /* best effort */ }
+    }
   }
 
   private getSafeDate(date: string | undefined): string {
