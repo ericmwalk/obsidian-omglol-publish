@@ -2,6 +2,21 @@
 
 ---
 
+## v2.7.0 — 2026-06-11 (in progress)
+
+### Weblog import from omg.lol
+- New command: **"Import Weblog Posts from omg.lol"** — fetches all existing weblog entries via `GET /address/{username}/weblog/entries` in a single API call and creates local notes for each one
+- Full frontmatter is written on import: `entry` (ID for future publish/update), `slug`, `title`, `date` (converted from Unix timestamp to YYYY-MM-DD), `status` (API `live` → `published`, `draft` → `draft`), and `tags` (parsed from the `Tags:` line in the raw `source` field)
+- Body content comes from the `body` field (clean markdown, no frontmatter), so no stripping needed
+- Duplicate guard: skips any entry whose `entry` ID already exists in the vault, and also skips if the target file path already exists
+- Posts land at `basePath/posts/yyyy/mm/YYYY-MM-DD_slug.md` (or `slug.md` if auto-renaming is disabled)
+- Pages land at `basePath/pages/slug.md` — no date subfolder, and `type: page` is added to frontmatter
+- Path resolution order: new **Import base path** setting → existing **Base folder path** (auto-organize) → prompt modal at import time
+- New **Import base path** setting added to Weblog Settings — always visible (not gated on auto-organize toggle), with folder browser button
+- Final notice shows count of imported vs. skipped posts
+
+---
+
 ## v2.6.0 — 2026-05-08
 
 ### paste.lol wikilink support

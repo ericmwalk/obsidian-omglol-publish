@@ -266,6 +266,69 @@ export class SettingsTab extends PluginSettingTab {
               await this.plugin.saveSettings();
             })
         );
+
+      new Setting(containerEl)
+        .setName("Auto-organize posts by date")
+        .setDesc("Move each post into a yyyy/mm subfolder under the base path after publishing. Re-publishing corrects the location if the date changed.")
+        .addToggle(toggle =>
+          toggle
+            .setValue(this.plugin.settings.enableAutoOrganize ?? false)
+            .onChange(async (value) => {
+              this.plugin.settings.enableAutoOrganize = value;
+              await this.plugin.saveSettings();
+              this.display();
+            })
+        );
+
+      if (this.plugin.settings.enableAutoOrganize) {
+        new Setting(containerEl)
+          .setName("Base folder path")
+          .setDesc("Posts will be placed at base/yyyy/mm/filename (e.g. runs.lol/weblog/posts)")
+          .addText(text => {
+            text
+              .setPlaceholder("runs.lol/weblog/posts")
+              .setValue(this.plugin.settings.autoOrganizeBasePath ?? "")
+              .onChange(async (value) => {
+                this.plugin.settings.autoOrganizeBasePath = value.trim();
+                await this.plugin.saveSettings();
+              });
+
+            const browseBtn = text.inputEl.parentElement?.createEl("button", {
+              text: "📁",
+              cls: "clickable-icon",
+            });
+
+            browseBtn?.addEventListener("click", () => {
+              new FolderSuggest(this.app, text.inputEl, "").open();
+            });
+
+            return text;
+          });
+      }
+
+      new Setting(containerEl)
+        .setName("Import base path")
+        .setDesc("Folder where imported posts land (yyyy/mm subfolders created automatically). Falls back to base folder path if set. Leave blank to be prompted at import time.")
+        .addText(text => {
+          text
+            .setPlaceholder("weblog/posts")
+            .setValue(this.plugin.settings.weblogImportPath ?? "")
+            .onChange(async (value) => {
+              this.plugin.settings.weblogImportPath = value.trim();
+              await this.plugin.saveSettings();
+            });
+
+          const browseBtn = text.inputEl.parentElement?.createEl("button", {
+            text: "📁",
+            cls: "clickable-icon",
+          });
+
+          browseBtn?.addEventListener("click", () => {
+            new FolderSuggest(this.app, text.inputEl, "").open();
+          });
+
+          return text;
+        });
     }
 
     // === some.pics Settings===
