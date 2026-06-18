@@ -25,6 +25,12 @@ export class WeblogPublisher {
       callback: () => this.deleteCurrentPost(),
     });
 
+    this.plugin.addCommand({
+      id: "import-weblog-posts",
+      name: "Import Weblog Posts from omg.lol",
+      callback: () => this.importWeblogPosts(),
+    });
+
   }
 
   public async publishCurrentNote() {
@@ -88,12 +94,16 @@ export class WeblogPublisher {
       ? `Tags: ${tagsArray.join(", ")}\n`
       : "";
 
-    // Optional fields for Type and Status
+    // Optional fields for Type, Status, and Template
     const type = metadata.type?.trim();
     const validTypeLine = type && type.toLowerCase() !== "post" ? `Type: ${type}\n` : "";
 
     const apiStatus = metadata.status?.trim();
     const statusLine = apiStatus ? `Status: ${apiStatus}\n` : "";
+
+    const templateKey = Object.keys(metadata as object).find((k: string) => k.toLowerCase() === "template");
+    const template = templateKey ? String(metadata[templateKey]).trim() : undefined;
+    const templateLine = template ? `Template: ${template}\n` : "";
 
     const rawBody = this.stripFrontmatter(content);
     const pathFormat = await this.getPostPathFormat();
@@ -107,7 +117,7 @@ export class WeblogPublisher {
 
     const titleLine = useTitle.length > 0 ? `Title: ${useTitle}\n` : "";
 
-    const fullPost = `${titleLine}Slug: ${slug}\nDate: ${date}\n${validTypeLine}${statusLine}${tagsLine}\n${bodyContent}`;
+    const fullPost = `${titleLine}Slug: ${slug}\nDate: ${date}\n${validTypeLine}${statusLine}${templateLine}${tagsLine}\n${bodyContent}`;
 
     const endpoint = entryId
       ? `https://api.omg.lol/address/${this.settings.username}/weblog/entry/${entryId}`
@@ -141,6 +151,7 @@ export class WeblogPublisher {
         if (allowRename) {
           await this.renameFileWithSlug(file, safeDate, returnedSlug);
         }
+        await this.moveFileToDateFolder(file, safeDate, isPage);
 // THIS SHOULD BE CHANGED
 //        new Notice(entryId ? "🔁 Weblog post updated." : "✅ Weblog post published.");
         const isDraft = status === "draft";
@@ -194,6 +205,10 @@ export class WeblogPublisher {
       const apiStatus = metadata.status?.trim();
       const statusLine = apiStatus ? `Status: ${apiStatus}\n` : "";
 
+      const templateKey = Object.keys(metadata as object).find((k: string) => k.toLowerCase() === "template");
+      const template = templateKey ? String(metadata[templateKey]).trim() : undefined;
+      const templateLine = template ? `Template: ${template}\n` : "";
+
       const rawBody = this.stripFrontmatter(content);
       const resolvedPathFormat = pathFormat ?? await this.getPostPathFormat();
       const { resolved: bodyContent } = this.resolveWikilinks(rawBody, file.path, resolvedPathFormat);
@@ -201,7 +216,7 @@ export class WeblogPublisher {
         ? `Title: ${metadata.title.trim()}\n`
         : "";
 
-      const fullPost = `${titleLine}Slug: ${slug}\nDate: ${date}\n${validTypeLine}${statusLine}${tagsLine}\n${bodyContent}`;
+      const fullPost = `${titleLine}Slug: ${slug}\nDate: ${date}\n${validTypeLine}${statusLine}${templateLine}${tagsLine}\n${bodyContent}`;
       const endpoint = entryId
         ? `https://api.omg.lol/address/${this.settings.username}/weblog/entry/${entryId}`
         : `https://api.omg.lol/address/${this.settings.username}/weblog/entry`;
@@ -223,6 +238,9 @@ export class WeblogPublisher {
           const returnedSlug = entry.slug || slug;
           await this.injectOrUpdateFrontmatter(file, entry.entry, returnedSlug);
 
+          const isPage = type?.toLowerCase() === "page";
+          await this.moveFileToDateFolder(file, this.getSafeDate(date), isPage);
+
           new Notice(entryId ? "🔁 Weblog post updated." : "✅ Weblog post published.");
 
         } else {
@@ -234,7 +252,157 @@ export class WeblogPublisher {
       }
     }
   
-    public async batchPublish() {
+    public async importWeblogPosts() {
+    if (!this.settings.enableWeblog) {
+      new Notice("Weblog publishing is disabled in settings.");
+      return;
+    }
+
+    let basePath =
+      this.settings.weblogImportPath?.trim() ||
+      this.settings.autoOrganizeBasePath?.trim() ||
+      "";
+
+    if (!basePath) {
+      const prompted = await this.promptForImportPath();
+      if (!prompted) return;
+      basePath = prompted;
+    }
+    basePath = basePath.replace(/\/$/, "");
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let entries: any[];
+    try {
+      const response = await requestUrl({
+        method: "GET",
+        url: `https://api.omg.lol/address/${this.settings.username}/weblog/entries`,
+        headers: {
+          Authorization: `Bearer ${this.settings.apiToken || this.settings.token}`,
+        },
+      });
+      entries = response.json?.response?.entries ?? [];
+    } catch (error) {
+      console.error("Error fetching weblog entries:", error);
+      new Notice("❌ Failed to fetch weblog entries.");
+      return;
+    }
+
+    if (!entries.length) {
+      new Notice("No weblog entries found.");
+      return;
+    }
+
+    // Collect existing entry IDs to skip duplicates
+    const existingEntries = new Set<string>();
+    for (const f of this.app.vault.getAllLoadedFiles()) {
+      if (!(f instanceof TFile) || f.extension !== "md") continue;
+      const fm = this.app.metadataCache.getCache(f.path)?.frontmatter;
+      if (fm?.entry) existingEntries.add(String(fm.entry));
+    }
+
+    let imported = 0;
+    let skipped = 0;
+
+    for (const entry of entries) {
+      const entryId = String(entry.entry ?? "");
+      if (!entryId) continue;
+
+      if (existingEntries.has(entryId)) {
+        skipped++;
+        continue;
+      }
+
+      const dateStr = entry.date
+        ? new Date(Number(entry.date) * 1000).toISOString().split("T")[0]
+        : new Date().toISOString().split("T")[0];
+
+      const slug = entry.metadata?.slug ?? this.slugify(entry.title ?? entryId);
+      const title: string = entry.title ?? "";
+      const body: string = entry.body ?? "";
+
+      const tagsMatch = (entry.source ?? "").match(/^Tags:\s*(.+)$/m);
+      const tags: string[] = tagsMatch
+        ? tagsMatch[1].split(",").map((t: string) => t.trim()).filter(Boolean)
+        : [];
+
+      const rawStatus = (entry.status ?? "").toLowerCase();
+      const status = rawStatus === "live" ? "published" : rawStatus === "draft" ? "draft" : "draft";
+
+      const isPage = (entry.type ?? "").toLowerCase() === "page";
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const fm: Record<string, any> = { entry: entryId, slug, title, date: dateStr, status };
+      if (isPage) fm.type = "page";
+      if (tags.length) fm.tags = tags;
+
+      const fileContent = `---\n${stringifyYaml(fm).trim()}\n---\n\n${body}`;
+
+      let targetFolder: string;
+      let filename: string;
+
+      if (isPage) {
+        targetFolder = normalizePath(`${basePath}/pages`);
+        filename = `${slug}.md`;
+      } else {
+        const [year, month] = dateStr.split("-");
+        targetFolder = normalizePath(`${basePath}/posts/${year}/${month}`);
+        filename = this.settings.enableRenaming
+          ? `${dateStr}_${slug}.md`
+          : `${slug}.md`;
+      }
+
+      const targetPath = normalizePath(`${targetFolder}/${filename}`);
+
+      if (this.app.vault.getAbstractFileByPath(targetPath)) {
+        skipped++;
+        continue;
+      }
+
+      if (!this.app.vault.getAbstractFileByPath(targetFolder)) {
+        await this.app.vault.createFolder(targetFolder);
+      }
+
+      await this.app.vault.create(targetPath, fileContent);
+      imported++;
+    }
+
+    new Notice(`✅ Import complete. ${imported} imported, ${skipped} skipped.`);
+  }
+
+  private promptForImportPath(): Promise<string | null> {
+    return new Promise((resolve) => {
+      const modal = new Modal(this.app);
+      modal.titleEl.setText("Import Destination");
+      modal.contentEl.createEl("p", {
+        text: "Enter the base folder path for imported posts (yyyy/mm subfolders will be created automatically):",
+      });
+
+      const input = modal.contentEl.createEl("input", { type: "text" });
+      input.placeholder = "weblog/posts";
+      input.style.width = "100%";
+      input.style.marginBottom = "1em";
+
+      const buttonRow = modal.contentEl.createDiv({ cls: "modal-button-container" });
+
+      new ButtonComponent(buttonRow)
+        .setButtonText("Cancel")
+        .onClick(() => { modal.close(); resolve(null); });
+
+      new ButtonComponent(buttonRow)
+        .setButtonText("Import")
+        .setCta()
+        .onClick(() => {
+          const val = input.value.trim();
+          modal.close();
+          resolve(val || null);
+        });
+
+      modal.open();
+      activeWindow.setTimeout(() => input.focus(), 50);
+    });
+  }
+
+  public async batchPublish() {
       // Get list of folders
       const folders = this.app.vault
         .getAllLoadedFiles()
@@ -700,6 +868,24 @@ private async warnAndConfirm(unresolvedLinks: string[], imageEmbeds: string[]): 
 
     modal.open();
   });
+}
+
+private async moveFileToDateFolder(file: TFile, date: string, isPage: boolean) {
+  if (!this.settings.enableAutoOrganize || !this.settings.autoOrganizeBasePath || isPage) return;
+  if (!date.match(/^\d{4}-\d{2}-\d{2}$/)) return;
+
+  const [year, month] = date.split("-");
+  const base = this.settings.autoOrganizeBasePath.replace(/\/$/, "");
+  const targetFolder = normalizePath(`${base}/${year}/${month}`);
+  const targetPath = normalizePath(`${targetFolder}/${file.name}`);
+
+  if (normalizePath(file.path) === targetPath) return;
+
+  if (!this.app.vault.getAbstractFileByPath(targetFolder)) {
+    await this.app.vault.createFolder(targetFolder);
+  }
+
+  await this.app.fileManager.renameFile(file, targetPath);
 }
 
 private async confirmDelete(message: string): Promise<boolean> {

@@ -13,6 +13,9 @@ export interface WeblogPublisherSettings {
   renamePages: boolean;
   slugWordCount: number;
   weblogBaseUrl: string;
+  enableAutoOrganize?: boolean;
+  autoOrganizeBasePath?: string;
+  weblogImportPath?: string;
 }
 
 export interface PicsUploaderSettings {
@@ -64,6 +67,9 @@ export const DEFAULT_SETTINGS: CombinedSettings = {
   renamePages: false,
   slugWordCount: 5,
   weblogBaseUrl: "",
+  enableAutoOrganize: false,
+  autoOrganizeBasePath: "",
+  weblogImportPath: "",
 
   // Pics defaults
   enablePics: false,
