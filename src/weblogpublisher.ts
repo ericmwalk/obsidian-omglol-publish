@@ -116,8 +116,9 @@ export class WeblogPublisher {
     }
 
     const titleLine = useTitle.length > 0 ? `Title: ${useTitle}\n` : "";
+    const extraLines = this.buildExtraMetadataLines(metadata);
 
-    const fullPost = `${titleLine}Slug: ${slug}\nDate: ${date}\n${validTypeLine}${statusLine}${templateLine}${tagsLine}\n${bodyContent}`;
+    const fullPost = `${titleLine}Slug: ${slug}\n${extraLines}Date: ${date}\n${validTypeLine}${statusLine}${templateLine}${tagsLine}\n${bodyContent}`;
 
     const endpoint = entryId
       ? `https://api.omg.lol/address/${this.settings.username}/weblog/entry/${entryId}`
@@ -215,8 +216,9 @@ export class WeblogPublisher {
       const titleLine = metadata.title?.trim()
         ? `Title: ${metadata.title.trim()}\n`
         : "";
+      const extraLines = this.buildExtraMetadataLines(metadata);
 
-      const fullPost = `${titleLine}Slug: ${slug}\nDate: ${date}\n${validTypeLine}${statusLine}${templateLine}${tagsLine}\n${bodyContent}`;
+      const fullPost = `${titleLine}Slug: ${slug}\n${extraLines}Date: ${date}\n${validTypeLine}${statusLine}${templateLine}${tagsLine}\n${bodyContent}`;
       const endpoint = entryId
         ? `https://api.omg.lol/address/${this.settings.username}/weblog/entry/${entryId}`
         : `https://api.omg.lol/address/${this.settings.username}/weblog/entry`;
@@ -316,7 +318,8 @@ export class WeblogPublisher {
         ? new Date(Number(entry.date) * 1000).toISOString().split("T")[0]
         : new Date().toISOString().split("T")[0];
 
-      const slug = entry.metadata?.slug ?? this.slugify(entry.title ?? entryId);
+      const entryMetadata = this.parseEntryMetadata(entry.metadata);
+      const slug = entryMetadata.slug ?? this.slugify(entry.title ?? entryId);
       const title: string = entry.title ?? "";
       const body: string = entry.body ?? "";
 
@@ -334,6 +337,16 @@ export class WeblogPublisher {
       const fm: Record<string, any> = { entry: entryId, slug, title, date: dateStr, status };
       if (isPage) fm.type = "page";
       if (tags.length) fm.tags = tags;
+
+      // Pull back any custom metadata (e.g. Modified, Description) that isn't
+      // one of the fields already represented above.
+      const reservedMetadataKeys = new Set(["slug", "date"]);
+      for (const key of Object.keys(entryMetadata)) {
+        if (reservedMetadataKeys.has(key.toLowerCase())) continue;
+        const value = entryMetadata[key];
+        if (value === null || value === undefined || value === "") continue;
+        fm[key] = value;
+      }
 
       const fileContent = `---\n${stringifyYaml(fm).trim()}\n---\n\n${body}`;
 
@@ -519,16 +532,23 @@ export class WeblogPublisher {
   }
 
   private slugify(input: string): string {
-    // 1. Replace Markdown links with their text: [text](url) → text
-    let cleaned = input.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+    // 1. Replace Obsidian wikilinks with their display text: [[file|alias]] → alias,
+    //    [[file#heading]] → file. Image embeds (![[...]]) carry no useful slug text, drop them.
+    let cleaned = input.replace(
+      /(!?)\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g,
+      (_m, bang, target, alias) => (bang ? "" : (alias ?? target).replace(/\.md$/i, "").trim())
+    );
 
-    // 2. Replace HTML links with their inner text: <a href="...">text</a> → text
+    // 2. Replace Markdown links with their text: [text](url) → text
+    cleaned = cleaned.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+
+    // 3. Replace HTML links with their inner text: <a href="...">text</a> → text
     cleaned = cleaned.replace(/<a\s+[^>]*href=["'][^"']*["'][^>]*>(.*?)<\/a>/gi, "$1");
 
-    // 3. Remove bare URLs (http/https)
+    // 4. Remove bare URLs (http/https)
     cleaned = cleaned.replace(/https?:\/\/\S+/g, "");
 
-    // 4. Clean and extract words
+    // 5. Clean and extract words
     const words = cleaned
       .replace(/['"-]/g, "")
       .replace(/[^a-zA-Z0-9\s]/g, "")
@@ -547,6 +567,49 @@ export class WeblogPublisher {
   private stripFrontmatter(content: string): string {
     const match = content.match(/^---\n([\s\S]*?)\n---\n*/);
     return match ? content.substring(match[0].length).trim() : content.trim();
+  }
+
+  // Reserved keys are already emitted as their own dedicated lines above.
+  // Anything else in frontmatter (e.g. Modified, Description) gets passed
+  // through to the API so it lands in the entry's metadata section.
+  private readonly reservedFrontmatterKeys = new Set([
+    "title", "slug", "date", "type", "status", "template", "tags", "entry",
+  ]);
+
+  // The API has been observed returning entry.metadata as either a parsed
+  // object or a JSON-encoded string, depending on endpoint — normalize both.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private parseEntryMetadata(metadata: unknown): Record<string, any> {
+    if (!metadata) return {};
+    if (typeof metadata === "string") {
+      try {
+        const parsed = JSON.parse(metadata);
+        return parsed && typeof parsed === "object" ? parsed : {};
+      } catch {
+        return {};
+      }
+    }
+    return typeof metadata === "object" ? { ...metadata } : {};
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private buildExtraMetadataLines(metadata: Record<string, any>): string {
+    let lines = "";
+    for (const key of Object.keys(metadata)) {
+      if (this.reservedFrontmatterKeys.has(key.toLowerCase())) continue;
+
+      const value = metadata[key];
+      if (value === null || value === undefined || value === "") continue;
+
+      const formatted = Array.isArray(value)
+        ? value.join(", ")
+        : String(value).trim();
+      if (!formatted) continue;
+
+      const label = key.charAt(0).toUpperCase() + key.slice(1);
+      lines += `${label}: ${formatted}\n`;
+    }
+    return lines;
   }
 
 // Added this to help perserve existing Frontmatter
